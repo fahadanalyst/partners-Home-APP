@@ -104,51 +104,57 @@ export const PatientResourceData: React.FC = () => {
     fetchFormId();
   }, []);
 
+  // Load patient info + saved form data (latest draft or specific ?id= submission)
   useEffect(() => {
-    if (patientId && patientId !== DUMMY_PATIENT_ID) {
-      const fetchPatient = async () => {
-        const { data, error } = await supabase
-          .from('patients')
-          .select('first_name, last_name, dob, gender, phone, street, apt, city, state, zip, insurance_id')
-          .eq('id', patientId)
-          .single();
-        
-        if (data && !error) {
-          setValue('patient.name', `${data.first_name} ${data.last_name}`);
-          setValue('patient.street', data.street || '');
-          setValue('patient.apt', data.apt || '');
-          setValue('patient.city', data.city || '');
-          setValue('patient.state', data.state || '');
-          setValue('patient.zip', data.zip || '');
-          setValue('patient.phone', data.phone || '');
-          setValue('patient.gender', data.gender === 'female' ? 'Female' : 'Male');
-          setValue('demographics.dob', data.dob);
-          setValue('insurance.medicaidNumber', data.insurance_id || '');
-        }
-      };
-      fetchPatient();
-    }
-  }, [patientId, setValue]);
+    if (!patientId || patientId === DUMMY_PATIENT_ID) return;
 
-  // Load saved form data if editing an existing submission (?id=)
-  useEffect(() => {
-    if (!editId) return;
-    const fetchSubmission = async () => {
-      try {
-        const { data, error } = await supabase
+    const loadData = async () => {
+      // 1. Always populate patient fields from patient record
+      const { data: patient } = await supabase
+        .from('patients')
+        .select('first_name, last_name, dob, gender, phone, street, apt, city, state, zip, insurance_id')
+        .eq('id', patientId)
+        .single();
+
+      if (patient) {
+        setValue('patient.name', `${patient.first_name} ${patient.last_name}`);
+        setValue('patient.street', patient.street || '');
+        setValue('patient.apt', patient.apt || '');
+        setValue('patient.city', patient.city || '');
+        setValue('patient.state', patient.state || '');
+        setValue('patient.zip', patient.zip || '');
+        setValue('patient.phone', patient.phone || '');
+        setValue('patient.gender', patient.gender === 'female' ? 'Female' : 'Male');
+        setValue('demographics.dob', patient.dob);
+        setValue('insurance.medicaidNumber', patient.insurance_id || '');
+      }
+
+      // 2. If ?id= is present, load that specific saved submission and override
+      if (editId) {
+        const { data: saved } = await supabase
           .from('form_responses')
           .select('*')
           .eq('id', editId)
           .single();
-        if (data && !error) {
-          reset(data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching submission:', error);
+        if (saved?.data) { reset(saved.data); return; }
+      }
+
+      // 3. Otherwise auto-load the latest saved response for this patient+form
+      if (formId) {
+        const { data: latest } = await supabase
+          .from('form_responses')
+          .select('*')
+          .eq('patient_id', patientId)
+          .eq('form_id', formId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latest?.data) reset(latest.data);
       }
     };
-    fetchSubmission();
-  }, [editId, reset]);
+
+    loadData();
+  }, [patientId, formId, editId]);
 
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);

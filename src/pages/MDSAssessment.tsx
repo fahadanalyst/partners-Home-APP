@@ -288,45 +288,51 @@ export const MDSAssessment: React.FC = () => {
     fetchFormId();
   }, []);
 
+  // Load patient info + saved form data (latest draft or specific ?id= submission)
   useEffect(() => {
-    if (patientId && patientId !== DUMMY_PATIENT_ID) {
-      const fetchPatient = async () => {
-        const { data, error } = await supabase
-          .from('patients')
-          .select('first_name, last_name, dob, gender')
-          .eq('id', patientId)
-          .single();
-        
-        if (data && !error) {
-          setValue('sectionAA.firstName', data.first_name);
-          setValue('sectionAA.lastName', data.last_name);
-          setValue('sectionBB.birthdate', data.dob);
-          setValue('sectionBB.gender', data.gender === 'female' ? '2' : '1');
-        }
-      };
-      fetchPatient();
-    }
-  }, [patientId, setValue]);
+    if (!patientId || patientId === DUMMY_PATIENT_ID) return;
 
-  // Load saved form data if editing an existing submission (?id=)
-  useEffect(() => {
-    if (!editId) return;
-    const fetchSubmission = async () => {
-      try {
-        const { data, error } = await supabase
+    const loadData = async () => {
+      // 1. Always populate patient demographic fields
+      const { data: patient } = await supabase
+        .from('patients')
+        .select('first_name, last_name, dob, gender')
+        .eq('id', patientId)
+        .single();
+
+      if (patient) {
+        setValue('sectionAA.firstName', patient.first_name);
+        setValue('sectionAA.lastName', patient.last_name);
+        setValue('sectionBB.birthdate', patient.dob);
+        setValue('sectionBB.gender', patient.gender === 'female' ? '2' : '1');
+      }
+
+      // 2. If ?id= is present, load that specific saved submission and override
+      if (editId) {
+        const { data: saved } = await supabase
           .from('form_responses')
           .select('*')
           .eq('id', editId)
           .single();
-        if (data && !error) {
-          reset(data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching MDS submission:', error);
+        if (saved?.data) { reset(saved.data); return; }
+      }
+
+      // 3. Otherwise auto-load the latest saved response for this patient+form
+      if (formId) {
+        const { data: latest } = await supabase
+          .from('form_responses')
+          .select('*')
+          .eq('patient_id', patientId)
+          .eq('form_id', formId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latest?.data) reset(latest.data);
       }
     };
-    fetchSubmission();
-  }, [editId, reset]);
+
+    loadData();
+  }, [patientId, formId, editId]);
 
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
