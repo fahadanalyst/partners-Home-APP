@@ -118,6 +118,14 @@ interface Visit {
   type: string;
 }
 
+interface PatientFile {
+  id: string;
+  name: string;
+  size: string;
+  url: string;
+  uploaded_at: string;
+}
+
 const ComplianceItem: React.FC<{ 
   title: string; 
   lastDate: string | null; 
@@ -168,60 +176,6 @@ const ComplianceItem: React.FC<{
           Critical: Action required immediately
         </div>
       )}
-
-      {/* ── Patient Files Section ── */}
-      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-          <h3 className="font-bold text-zinc-900 flex items-center gap-2">
-            <Paperclip size={18} className="text-partners-blue-dark" />
-            Documents &amp; Files
-            <span className="ml-2 text-xs font-normal text-zinc-400">{patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}</span>
-          </h3>
-          <div>
-            <input type="file" ref={fileInputRef} className="hidden"
-              onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }} />
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
-              {uploadingFile
-                ? <><Loader2 size={15} className="mr-2 animate-spin" /> Uploading...</>
-                : <><Upload size={15} className="mr-2" /> Upload File</>
-              }
-            </Button>
-          </div>
-        </div>
-        <div className="p-6">
-          {patientFiles.length === 0 ? (
-            <div className="text-center py-12 text-zinc-400">
-              <Paperclip size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm italic">No files uploaded yet.</p>
-              <p className="text-xs mt-1">Upload documents, lab results, or any relevant files for this patient.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {patientFiles.map(file => (
-                <div key={file.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl p-3 group">
-                  <div className="w-9 h-9 rounded-xl bg-partners-blue-dark/10 flex items-center justify-center shrink-0">
-                    <FileText size={16} className="text-partners-blue-dark" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-zinc-800 truncate">{file.name}</p>
-                    <p className="text-[10px] text-zinc-400">{file.size} · {new Date(file.uploaded_at).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <a href={file.url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-partners-blue-dark hover:bg-white transition-colors">
-                      <Eye size={14} />
-                    </a>
-                    <button onClick={() => handleDeleteFile(file.id, file.url)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-white transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 };
@@ -235,6 +189,11 @@ export const PatientProfile: React.FC = () => {
   const [printing, setPrinting] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  // File management state
+  const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (id) {
       fetchPatientData();
@@ -246,7 +205,6 @@ export const PatientProfile: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch patient
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
         .select('*')
@@ -256,7 +214,6 @@ export const PatientProfile: React.FC = () => {
       if (patientError) throw patientError;
       setPatient(patientData);
 
-      // Fetch visits
       const { data: visitsData, error: visitsError } = await supabase
         .from('visits')
         .select('*')
@@ -274,9 +231,69 @@ export const PatientProfile: React.FC = () => {
     }
   };
 
+  const fetchPatientFiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .storage
+        .from('patient-files')
+        .list(`${id}/`, { sortBy: { column: 'created_at', order: 'desc' } });
+
+      if (error) throw error;
+
+      const files = await Promise.all(
+        (data || []).map(async (file) => {
+          const { data: urlData } = supabase.storage
+            .from('patient-files')
+            .getPublicUrl(`${id}/${file.name}`);
+          return {
+            id: file.id ?? file.name,
+            name: file.name,
+            size: file.metadata?.size
+              ? `${(file.metadata.size / 1024).toFixed(1)} KB`
+              : 'Unknown',
+            url: urlData.publicUrl,
+            uploaded_at: file.created_at ?? new Date().toISOString(),
+          };
+        })
+      );
+      setPatientFiles(files);
+    } catch (err) {
+      console.error('Error fetching patient files:', err);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      setUploadingFile(true);
+      const filePath = `${id}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage
+        .from('patient-files')
+        .upload(filePath, file);
+      if (error) throw error;
+      await fetchPatientFiles();
+    } catch (err) {
+      console.error('Error uploading file:', err);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleDeleteFile = async (fileId: string, fileUrl: string) => {
+    try {
+      const parts = fileUrl.split(`${id}/`);
+      const fileName = parts[parts.length - 1];
+      const { error } = await supabase.storage
+        .from('patient-files')
+        .remove([`${id}/${fileName}`]);
+      if (error) throw error;
+      await fetchPatientFiles();
+    } catch (err) {
+      console.error('Error deleting file:', err);
+    }
+  };
+
   const handlePrint = async () => {
     if (!patient) return;
-    
     try {
       setPrinting(true);
       await generateFormPDF('Patient Summary', { patient, visits }, `Patient_Summary_${patient.last_name}_${patient.first_name}.pdf`);
@@ -677,23 +694,18 @@ export const PatientProfile: React.FC = () => {
         </div>
         <div className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Annual Physical */}
             <ComplianceItem 
               title="Annual Physical"
               lastDate={patient.last_annual_physical}
               dueDate={patient.last_annual_physical ? addYears(new Date(patient.last_annual_physical), 1) : null}
               type="annual"
             />
-            
-            {/* Semi-Annual Report */}
             <ComplianceItem 
               title="Health Status Report"
               lastDate={patient.last_semi_annual_report}
               dueDate={patient.last_semi_annual_report ? addMonths(new Date(patient.last_semi_annual_report), 6) : null}
               type="semi-annual"
             />
-
-            {/* Monthly Visit */}
             <ComplianceItem 
               title="Monthly Visit"
               lastDate={patient.last_monthly_visit}
@@ -780,7 +792,7 @@ export const PatientProfile: React.FC = () => {
         </Link>
       </div>
 
-      {/* Visit History */}
+      {/* Clinical Forms */}
       <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
           <h3 className="font-bold text-zinc-900">Clinical Forms</h3>
@@ -853,9 +865,7 @@ export const PatientProfile: React.FC = () => {
                     <td className="px-6 py-4 text-sm text-zinc-700">
                       {visit.scheduled_at ? format(new Date(visit.scheduled_at), 'MMM d, yyyy h:mm a') : 'N/A'}
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-zinc-900">
-                      {visit.type || 'N/A'}
-                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-zinc-900">{visit.type || 'N/A'}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         visit.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-600'
@@ -882,17 +892,28 @@ export const PatientProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Patient Files Section ── */}
+      {/* Documents & Files */}
       <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
           <h3 className="font-bold text-zinc-900 flex items-center gap-2">
             <Paperclip size={18} className="text-partners-blue-dark" />
             Documents &amp; Files
-            <span className="ml-2 text-xs font-normal text-zinc-400">{patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}</span>
+            <span className="ml-2 text-xs font-normal text-zinc-400">
+              {patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}
+            </span>
           </h3>
           <div>
-            <input type="file" ref={fileInputRef} className="hidden"
-              onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }} />
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={e => {
+                if (e.target.files?.[0]) {
+                  handleFileUpload(e.target.files[0]);
+                  e.target.value = '';
+                }
+              }}
+            />
             <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
               {uploadingFile
                 ? <><Loader2 size={15} className="mr-2 animate-spin" /> Uploading...</>
@@ -920,12 +941,18 @@ export const PatientProfile: React.FC = () => {
                     <p className="text-[10px] text-zinc-400">{file.size} · {new Date(file.uploaded_at).toLocaleDateString()}</p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <a href={file.url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-partners-blue-dark hover:bg-white transition-colors">
+                    <a
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-partners-blue-dark hover:bg-white transition-colors"
+                    >
                       <Eye size={14} />
                     </a>
-                    <button onClick={() => handleDeleteFile(file.id, file.url)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-white transition-colors">
+                    <button
+                      onClick={() => handleDeleteFile(file.id, file.url)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-white transition-colors"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </div>
