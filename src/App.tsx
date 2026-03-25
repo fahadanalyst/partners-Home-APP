@@ -9,7 +9,8 @@ import { PhysicianSummary } from './pages/PhysicianSummary';
 import { RequestForServices } from './pages/RequestForServices';
 import { PatientResourceData } from './pages/PatientResourceData';
 import { PhysicianOrders } from './pages/PhysicianOrders';
-import { MDSAssessment } from './pages/MDSAssessment';
+//import { MDSAssessment } from './pages/MDSAssessment';
+import { MDSAssessment } from './components/PDFTemplates/MDSAssessmentTemplate';
 import { NursingAssessment } from './pages/NursingAssessment';
 import { MedicationAdministrationRecord } from './pages/MedicationAdministrationRecord';
 import { TreatmentAdministrationRecord } from './pages/TreatmentAdministrationRecord';
@@ -17,6 +18,8 @@ import { ClinicalNoteForm } from './pages/ClinicalNoteForm';
 import { AdmissionAssessment } from './pages/AdmissionAssessment';
 import { DischargeSummary } from './pages/DischargeSummary';
 import { UserManagement } from './pages/UserManagement';
+import { StaffManagement } from './pages/StaffManagement';
+import { HomeSafetyInspection } from './pages/HomeSafetyInspection';
 import { Patients } from './pages/Patients';
 import { PatientProfile } from './pages/PatientProfile';
 import { Schedule } from './pages/Schedule';
@@ -295,7 +298,7 @@ export default function App() {
           <Route 
             path="patients" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
                 <Patients />
               </RoleProtectedRoute>
             } 
@@ -303,7 +306,7 @@ export default function App() {
           <Route 
             path="patient-profile/:id" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
                 <PatientProfile />
               </RoleProtectedRoute>
             } 
@@ -311,7 +314,7 @@ export default function App() {
           <Route 
             path="medical-providers" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
                 <MedicalProviders />
               </RoleProtectedRoute>
             } 
@@ -319,7 +322,7 @@ export default function App() {
           <Route 
             path="schedule" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'clinical_worker']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager']}>
                 <Schedule />
               </RoleProtectedRoute>
             } 
@@ -327,7 +330,7 @@ export default function App() {
           <Route 
             path="notes" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse']}>
                 <ClinicalNotes />
               </RoleProtectedRoute>
             } 
@@ -335,7 +338,7 @@ export default function App() {
           <Route 
             path="clinical-forms" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <ClinicalForms />
               </RoleProtectedRoute>
             } 
@@ -343,7 +346,7 @@ export default function App() {
           <Route 
             path="progress-note" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <GAFCProgressNote />
               </RoleProtectedRoute>
             } 
@@ -351,7 +354,7 @@ export default function App() {
           <Route 
             path="care-plan" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <GAFCCarePlan />
               </RoleProtectedRoute>
             } 
@@ -359,7 +362,7 @@ export default function App() {
           <Route 
             path="physician-summary" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <PhysicianSummary />
               </RoleProtectedRoute>
             } 
@@ -367,7 +370,7 @@ export default function App() {
           <Route 
             path="request-for-services" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <RequestForServices />
               </RoleProtectedRoute>
             } 
@@ -375,7 +378,7 @@ export default function App() {
           <Route 
             path="patient-resource-data" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <PatientResourceData />
               </RoleProtectedRoute>
             } 
@@ -383,7 +386,7 @@ export default function App() {
           <Route 
             path="physician-orders" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <PhysicianOrders />
               </RoleProtectedRoute>
             } 
@@ -391,7 +394,7 @@ export default function App() {
           <Route 
             path="mds-assessment" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <MDSAssessment />
               </RoleProtectedRoute>
             } 
@@ -399,7 +402,7 @@ export default function App() {
           <Route 
             path="nursing-assessment" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <NursingAssessment />
               </RoleProtectedRoute>
             } 
@@ -407,7 +410,7 @@ export default function App() {
           <Route 
             path="mar" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <MedicationAdministrationRecord />
               </RoleProtectedRoute>
             } 
@@ -415,7 +418,7 @@ export default function App() {
           <Route 
             path="tar" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <TreatmentAdministrationRecord />
               </RoleProtectedRoute>
             } 
@@ -423,7 +426,7 @@ export default function App() {
           <Route 
             path="clinical-note-form" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <ClinicalNoteForm />
               </RoleProtectedRoute>
             } 
@@ -431,7 +434,7 @@ export default function App() {
           <Route 
             path="admission-assessment" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <AdmissionAssessment />
               </RoleProtectedRoute>
             } 
@@ -439,7 +442,7 @@ export default function App() {
           <Route 
             path="discharge-summary" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
                 <DischargeSummary />
               </RoleProtectedRoute>
             } 
@@ -455,7 +458,7 @@ export default function App() {
           <Route 
             path="referrals" 
             element={
-              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse']}>
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
                 <Referrals />
               </RoleProtectedRoute>
             } 
@@ -467,6 +470,22 @@ export default function App() {
                 <UserManagement />
               </RoleProtectedRoute>
             } 
+          />
+          <Route
+            path="staff-management"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager']}>
+                <StaffManagement />
+              </RoleProtectedRoute>
+            } 
+          />
+          <Route
+            path="home-safety-inspection"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse']}>
+                <HomeSafetyInspection />
+              </RoleProtectedRoute>
+            }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

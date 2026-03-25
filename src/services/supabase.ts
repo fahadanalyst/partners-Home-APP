@@ -469,7 +469,7 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
  * (Moved to top of file)
  */
 
-export type UserRole = 'admin' | 'manager' | 'frontdesk' | 'clinical_worker' | 'reviewer' | 'nurse';
+export type UserRole = 'admin' | 'manager' | 'frontdesk' | 'care_manager' | 'reviewer' | 'nurse';
 
 export interface Profile {
   id: string;

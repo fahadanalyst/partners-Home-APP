@@ -1,37 +1,158 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, Profile, UserRole } from '../services/supabase';
 import { Button } from '../components/Button';
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import { UserPlus, Shield, Mail, User as UserIcon, Trash2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Shield, Mail, User as UserIcon, Trash2, AlertCircle, Eye, EyeOff, Download, ChevronDown } from 'lucide-react';
 
+// ── Role definitions for access export ─────────────────────────────────────
+const ROLE_ACCESS: Record<string, { label: string; color: string; access: string[] }> = {
+  admin: {
+    label: 'Admin',
+    color: 'bg-purple-100 text-purple-700',
+    access: [
+      'Dashboard', 'Patients (Full CRUD)', 'Patient Profiles', 'Medical Providers',
+      'Referrals', 'Schedule', 'Clinical Notes', 'Clinical Forms (All)',
+      'Compliance Dashboard', 'User Management', 'Staff Management',
+      'Download PDF Reports', 'Delete Records',
+    ],
+  },
+  manager: {
+    label: 'Manager',
+    color: 'bg-blue-100 text-blue-700',
+    access: [
+      'Dashboard', 'Patients (Full CRUD)', 'Patient Profiles', 'Medical Providers',
+      'Referrals', 'Schedule', 'Clinical Notes', 'Clinical Forms (All)',
+      'Compliance Dashboard', 'Staff Management', 'Download PDF Reports',
+    ],
+  },
+  care_manager: {
+    label: 'Care Manager',
+    color: 'bg-teal-100 text-teal-700',
+    access: [
+      'Dashboard', 'Patients (View + Edit)', 'Patient Profiles', 'Medical Providers',
+      'Referrals', 'Schedule', 'Clinical Notes', 'Clinical Forms (All)',
+      'Download PDF Reports',
+    ],
+  },
+  nurse: {
+    label: 'Nurse',
+    color: 'bg-green-100 text-green-700',
+    access: [
+      'Dashboard', 'Patients (View + Edit)', 'Patient Profiles', 'Medical Providers',
+      'Referrals', 'Clinical Notes', 'Clinical Forms (All)', 'Download PDF Reports',
+    ],
+  },
+  frontdesk: {
+    label: 'Front Desk',
+    color: 'bg-yellow-100 text-yellow-700',
+    access: [
+      'Dashboard', 'Patients (View Only)', 'Patient Profiles (View)',
+      'Medical Providers', 'Referrals', 'Schedule',
+    ],
+  },
+  reviewer: {
+    label: 'Reviewer',
+    color: 'bg-orange-100 text-orange-700',
+    access: [
+      'Dashboard', 'Clinical Notes (View)', 'Clinical Forms (View)',
+      'Compliance Dashboard', 'Download PDF Reports',
+    ],
+  },
+};
+
+// ── Status Dropdown with smart positioning ───────────────────────────────────
+const StatusDropdown: React.FC<{ user: Profile; onToggle: (user: Profile, status: boolean) => void; isLoading: boolean }> = ({ user, onToggle, isLoading }) => {
+  const [open, setOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    // Decide whether to open up or down
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setDropUp(spaceBelow < 100);
+    }
+    // Close on outside click
+    const handler = (e: MouseEvent) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={btnRef}
+        disabled={isLoading}
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold cursor-pointer border transition-all ${
+          user.is_active
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-red-500'}`} />
+        {isLoading ? 'Updating...' : user.is_active ? 'Active' : 'Inactive'}
+        <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          className={`absolute left-0 w-36 bg-white rounded-2xl border border-zinc-200 shadow-xl z-[999] overflow-hidden ${
+            dropUp ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}
+        >
+          <button
+            onClick={() => { onToggle(user, true); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+          </button>
+          <button
+            onClick={() => { onToggle(user, false); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Inactive
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
 export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<{ id: string, name: string } | null>(null);
+  const [showRoleAccessModal, setShowRoleAccessModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+
   // Form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>('clinical_worker');
+  const [role, setRole] = useState<UserRole>('care_manager');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (data) setUsers(data);
     setLoading(false);
   };
@@ -40,21 +161,16 @@ export const UserManagement: React.FC = () => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-
     try {
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, fullName, role }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to create user');
-
       setShowAddModal(false);
-      setEmail('');
-      setPassword('');
-      setFullName('');
+      setEmail(''); setPassword(''); setFullName('');
       fetchUsers();
     } catch (err: any) {
       setError(err.message);
@@ -72,10 +188,8 @@ export const UserManagement: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-  
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to delete user');
-  
       fetchUsers();
       setUserToDelete(null);
     } catch (err: any) {
@@ -85,6 +199,44 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const handleToggleStatus = async (user: Profile, newStatus: boolean) => {
+    setUpdatingStatus(user.id);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: newStatus })
+      .eq('id', user.id);
+
+    if (!error) {
+      // If deactivating, also sign them out by invalidating their sessions
+      if (!newStatus) {
+        await fetch('/api/admin/deactivate-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id }),
+        }).catch(() => {}); // best-effort, don't block UI
+      }
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
+    }
+    setUpdatingStatus(null);
+  };
+
+  const handleExportRoleAccess = () => {
+    const lines: string[] = ['PARTNERS HOME NURSING SERVICES', 'ROLE ACCESS PERMISSIONS', `Generated: ${new Date().toLocaleDateString()}`, '='.repeat(60), ''];
+    Object.entries(ROLE_ACCESS).forEach(([, { label, access }]) => {
+      lines.push(`ROLE: ${label.toUpperCase()}`);
+      lines.push('-'.repeat(40));
+      access.forEach(item => lines.push(`  • ${item}`));
+      lines.push('');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Role_Access_List.txt'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const roleFmt = (r: string) => ROLE_ACCESS[r]?.label || r.replace('_', ' ');
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -92,10 +244,17 @@ export const UserManagement: React.FC = () => {
           <h2 className="text-2xl md:text-3xl font-bold text-partners-blue-dark italic">User Management</h2>
           <p className="text-sm md:text-base text-partners-gray">Manage clinical staff and system access roles.</p>
         </div>
-        <Button className="rounded-full px-6 w-full sm:w-auto" onClick={() => setShowAddModal(true)}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Add New User
-        </Button>
+        <div className="flex gap-3 w-full sm:w-auto">
+          <Button variant="secondary" className="rounded-full px-4" onClick={() => setShowRoleAccessModal(true)}>
+            <Shield className="w-4 h-4 mr-2" /> Role Access
+          </Button>
+          <Button variant="secondary" className="rounded-full px-4" onClick={handleExportRoleAccess}>
+            <Download className="w-4 h-4 mr-2" /> Export
+          </Button>
+          <Button className="rounded-full px-6 flex-1 sm:flex-none" onClick={() => setShowAddModal(true)}>
+            <UserPlus className="w-4 h-4 mr-2" /> Add New User
+          </Button>
+        </div>
       </div>
 
       {deleteError && (
@@ -107,38 +266,34 @@ export const UserManagement: React.FC = () => {
       )}
 
       {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+      <div className="hidden md:block bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-visible">
         <table className="w-full text-left border-collapse">
           <thead className="bg-zinc-50 border-b border-zinc-200">
             <tr>
-              <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">User</th>
+              <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider rounded-tl-3xl">User</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Role</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider text-right">Actions</th>
+              <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider text-right rounded-tr-3xl">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
-                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-32"></div></td>
-                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-24"></div></td>
-                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-16"></div></td>
-                  <td className="px-6 py-4"></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-32" /></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-24" /></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-zinc-100 rounded w-16" /></td>
+                  <td className="px-6 py-4" />
                 </tr>
               ))
             ) : users.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-6 py-12 text-center text-zinc-500">
-                  No users found.
-                </td>
-              </tr>
+              <tr><td colSpan={4} className="px-6 py-12 text-center text-zinc-500">No users found.</td></tr>
             ) : (
               users.map((user) => (
                 <tr key={user.id} className="hover:bg-zinc-50 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-partners-blue-dark/10 text-partners-blue-dark flex items-center justify-center font-bold">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${user.is_active ? 'bg-partners-blue-dark/10 text-partners-blue-dark' : 'bg-zinc-100 text-zinc-400'}`}>
                         {user.full_name?.[0]}
                       </div>
                       <div>
@@ -148,24 +303,22 @@ export const UserManagement: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-600">
-                      {user.role.replace('_', ' ')}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ROLE_ACCESS[user.role]?.color || 'bg-zinc-100 text-zinc-600'}`}>
+                      {roleFmt(user.role)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      Active
-                    </span>
+                    <StatusDropdown
+                      user={user}
+                      onToggle={handleToggleStatus}
+                      isLoading={updatingStatus === user.id}
+                    />
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost" size="sm"
                       className="text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => {
-                        setUserToDelete({ id: user.id, name: user.full_name });
-                      }}
+                      onClick={() => setUserToDelete({ id: user.id, name: user.full_name })}
                     >
                       <Trash2 size={16} />
                     </Button>
@@ -177,148 +330,145 @@ export const UserManagement: React.FC = () => {
         </table>
       </div>
 
-      {/* Mobile Card List */}
+      {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-32 bg-white rounded-3xl border border-zinc-200 animate-pulse"></div>
+            <div key={i} className="h-32 bg-white rounded-3xl border border-zinc-200 animate-pulse" />
           ))
-        ) : users.length === 0 ? (
-          <div className="bg-white p-12 rounded-3xl border border-zinc-200 text-center text-zinc-500">
-            No users found.
-          </div>
-        ) : (
-          users.map((user) => (
-            <div key={user.id} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-partners-blue-dark/10 text-partners-blue-dark flex items-center justify-center font-bold">
-                    {user.full_name?.[0]}
-                  </div>
-                  <div>
-                    <p className="font-bold text-zinc-900">{user.full_name}</p>
-                    <p className="text-xs text-zinc-500">{user.email}</p>
-                  </div>
+        ) : users.map((user) => (
+          <div key={user.id} className="bg-white p-4 rounded-3xl border border-zinc-200 shadow-sm space-y-4">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${user.is_active ? 'bg-partners-blue-dark/10 text-partners-blue-dark' : 'bg-zinc-100 text-zinc-400'}`}>
+                  {user.full_name?.[0]}
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="text-red-500"
-                  onClick={() => {
-                    setUserToDelete({ id: user.id, name: user.full_name });
-                  }}
-                >
-                  <Trash2 size={16} />
-                </Button>
+                <div>
+                  <p className="font-bold text-zinc-900">{user.full_name}</p>
+                  <p className="text-xs text-zinc-500">{user.email}</p>
+                </div>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-zinc-50">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-600">
-                  {user.role.replace('_', ' ')}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                  Active
-                </span>
-              </div>
+              <Button variant="ghost" size="sm" className="text-red-500"
+                onClick={() => setUserToDelete({ id: user.id, name: user.full_name })}>
+                <Trash2 size={16} />
+              </Button>
             </div>
-          ))
-        )}
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-50">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ROLE_ACCESS[user.role]?.color || 'bg-zinc-100 text-zinc-600'}`}>
+                {roleFmt(user.role)}
+              </span>
+              <StatusDropdown
+                user={user}
+                onToggle={handleToggleStatus}
+                isLoading={updatingStatus === user.id}
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
+      {/* Add User Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-md p-8">
+          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-md p-6 sm:p-8">
             <h3 className="text-xl font-bold text-zinc-900 mb-6">Create New User</h3>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium text-zinc-700">Full Name</label>
                 <div className="relative">
                   <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none"
-                    placeholder="Dr. Jane Smith"
-                    required
-                  />
+                    placeholder="Dr. Jane Smith" required />
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium text-zinc-700">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none"
-                    placeholder="doctor@clinic.com"
-                    required
-                  />
+                    placeholder="doctor@clinic.com" required />
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium text-zinc-700">Initial Password</label>
                 <div className="relative">
                   <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     className="w-full pl-10 pr-12 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none"
-                    placeholder="••••••••"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
+                    placeholder="••••••••" required />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-1">
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium text-zinc-700">System Role</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none appearance-none bg-white"
-                >
+                <select value={role} onChange={e => setRole(e.target.value as UserRole)}
+                  className="w-full px-4 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none bg-white">
                   <option value="admin">Admin</option>
                   <option value="manager">Manager</option>
-                  <option value="frontdesk">Front Desk</option>
-                  <option value="clinical_worker">Clinical Worker</option>
-                  <option value="reviewer">Reviewer</option>
+                  <option value="care_manager">Care Manager</option>
                   <option value="nurse">Nurse</option>
+                  <option value="frontdesk">Front Desk</option>
+                  <option value="reviewer">Reviewer</option>
                 </select>
               </div>
-
               {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
-
               <div className="flex gap-3 pt-4">
-                <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowAddModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create User'}
-                </Button>
+                <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowAddModal(false)}>Cancel</Button>
+                <Button type="submit" className="flex-1" disabled={submitting}>{submitting ? 'Creating...' : 'Create User'}</Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* Role Access Modal */}
+      {showRoleAccessModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-zinc-100">
+              <h3 className="text-xl font-bold text-zinc-900 flex items-center gap-2">
+                <Shield className="text-partners-blue-dark" size={20} /> Role Access Permissions
+              </h3>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={handleExportRoleAccess}>
+                  <Download size={14} className="mr-1" /> Export
+                </Button>
+                <button onClick={() => setShowRoleAccessModal(false)} className="text-zinc-400 hover:text-zinc-600 p-1">✕</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4">
+              {Object.entries(ROLE_ACCESS).map(([key, { label, color, access }]) => (
+                <div key={key} className="border border-zinc-100 rounded-2xl overflow-hidden">
+                  <div className="flex items-center gap-3 p-4 bg-zinc-50">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${color}`}>{label}</span>
+                    <span className="text-xs text-zinc-400">{access.length} permissions</span>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {access.map(item => (
+                      <div key={item} className="flex items-center gap-2 text-xs text-zinc-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-partners-green shrink-0" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmationModal
-        isOpen={!!userToDelete}
-        onClose={() => setUserToDelete(null)}
+        isOpen={!!userToDelete} onClose={() => setUserToDelete(null)}
         onConfirm={() => userToDelete && handleDeleteUser(userToDelete.id)}
         title="Delete User"
-        message={`Are you sure you want to delete ${userToDelete?.name}? This will permanently remove their access to the system.`}
-        confirmText="Delete User"
-        isLoading={isDeleting}
+        message={`Are you sure you want to delete ${userToDelete?.name}? This will permanently remove their access.`}
+        confirmText="Delete User" isLoading={isDeleting}
       />
     </div>
   );

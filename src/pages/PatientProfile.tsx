@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { 
@@ -23,7 +23,12 @@ import {
   Pill,
   FileSignature,
   UserPlus,
-  UserMinus
+  UserMinus,
+  Upload,
+  Eye,
+  Trash2,
+  Paperclip,
+  Loader2
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Logo } from '../components/Logo';
@@ -163,6 +168,60 @@ const ComplianceItem: React.FC<{
           Critical: Action required immediately
         </div>
       )}
+
+      {/* ── Patient Files Section ── */}
+      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+          <h3 className="font-bold text-zinc-900 flex items-center gap-2">
+            <Paperclip size={18} className="text-partners-blue-dark" />
+            Documents &amp; Files
+            <span className="ml-2 text-xs font-normal text-zinc-400">{patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}</span>
+          </h3>
+          <div>
+            <input type="file" ref={fileInputRef} className="hidden"
+              onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }} />
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
+              {uploadingFile
+                ? <><Loader2 size={15} className="mr-2 animate-spin" /> Uploading...</>
+                : <><Upload size={15} className="mr-2" /> Upload File</>
+              }
+            </Button>
+          </div>
+        </div>
+        <div className="p-6">
+          {patientFiles.length === 0 ? (
+            <div className="text-center py-12 text-zinc-400">
+              <Paperclip size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm italic">No files uploaded yet.</p>
+              <p className="text-xs mt-1">Upload documents, lab results, or any relevant files for this patient.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {patientFiles.map(file => (
+                <div key={file.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl p-3 group">
+                  <div className="w-9 h-9 rounded-xl bg-partners-blue-dark/10 flex items-center justify-center shrink-0">
+                    <FileText size={16} className="text-partners-blue-dark" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-800 truncate">{file.name}</p>
+                    <p className="text-[10px] text-zinc-400">{file.size} · {new Date(file.uploaded_at).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a href={file.url} target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-partners-blue-dark hover:bg-white transition-colors">
+                      <Eye size={14} />
+                    </a>
+                    <button onClick={() => handleDeleteFile(file.id, file.url)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-white transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -179,6 +238,7 @@ export const PatientProfile: React.FC = () => {
   useEffect(() => {
     if (id) {
       fetchPatientData();
+      fetchPatientFiles();
     }
   }, [id]);
 
@@ -268,14 +328,14 @@ export const PatientProfile: React.FC = () => {
 
       {/* Header Card */}
       <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-        <div className="bg-partners-blue-dark/5 p-8 border-b border-zinc-100">
+        <div className="bg-partners-blue-dark/5 p-4 sm:p-8 border-b border-zinc-100">
           <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
-            <div className="w-24 h-24 rounded-3xl bg-partners-blue-dark text-white flex items-center justify-center text-4xl font-bold shadow-lg">
+            <div className="w-24 h-24 rounded-3xl bg-partners-blue-dark text-white flex items-center justify-center text-2xl sm:text-4xl font-bold shadow-lg">
               {patient.first_name?.[0] || 'P'}{patient.last_name?.[0] || 'T'}
             </div>
             <div className="space-y-2 flex-1">
               <div className="flex items-center gap-4">
-                <h1 className="text-3xl font-bold text-zinc-900">{patient.last_name || 'Patient'}, {patient.first_name || ''}</h1>
+                <h1 className="text-xl sm:text-3xl font-bold text-zinc-900">{patient.last_name || 'Patient'}, {patient.first_name || ''}</h1>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                   patient.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-600'
                 }`}>
@@ -389,7 +449,7 @@ export const PatientProfile: React.FC = () => {
               Expanded Demographics
             </h3>
           </div>
-          <div className="p-6 grid grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-1">
               <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Preferred Name</p>
               <p className="text-zinc-700">{patient.preferred_name || 'N/A'}</p>
@@ -433,7 +493,7 @@ export const PatientProfile: React.FC = () => {
               Census & Service Details
             </h3>
           </div>
-          <div className="p-6 grid grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-1">
               <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">MDS Date</p>
               <p className="text-zinc-700">{patient.mds_date ? format(new Date(patient.mds_date), 'MMM d, yyyy') : 'N/A'}</p>
@@ -473,7 +533,7 @@ export const PatientProfile: React.FC = () => {
               Advanced Directives
             </h3>
           </div>
-          <div className="p-6 grid grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-1">
               <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Living Will</p>
               <p className="text-zinc-700">{patient.living_will || 'N/A'}</p>
@@ -506,7 +566,7 @@ export const PatientProfile: React.FC = () => {
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-1">
                 <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Name</p>
                 <p className="text-zinc-700 font-bold">{patient.emergency_contact_name || 'N/A'}</p>
@@ -690,28 +750,28 @@ export const PatientProfile: React.FC = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link to={`/progress-note?patientId=${patient.id}`} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
+        <Link to={`/progress-note?patientId=${patient.id}`} className="bg-white p-3 sm:p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
           <div className="w-12 h-12 rounded-2xl bg-partners-green/10 text-partners-green flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <FileText size={24} />
           </div>
           <h4 className="font-bold text-zinc-900 mb-1">Progress Note</h4>
           <p className="text-xs text-zinc-500">Complete monthly clinical note</p>
         </Link>
-        <Link to={`/care-plan?patientId=${patient.id}`} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
+        <Link to={`/care-plan?patientId=${patient.id}`} className="bg-white p-3 sm:p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
           <div className="w-12 h-12 rounded-2xl bg-partners-blue-dark/10 text-partners-blue-dark flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <FileText size={24} />
           </div>
           <h4 className="font-bold text-zinc-900 mb-1">Care Plan</h4>
           <p className="text-xs text-zinc-500">Update patient care plan</p>
         </Link>
-        <Link to={`/physician-summary?patientId=${patient.id}`} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
+        <Link to={`/physician-summary?patientId=${patient.id}`} className="bg-white p-3 sm:p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
           <div className="w-12 h-12 rounded-2xl bg-partners-green/10 text-partners-green flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <FileText size={24} />
           </div>
           <h4 className="font-bold text-zinc-900 mb-1">Physician Summary</h4>
           <p className="text-xs text-zinc-500">Generate PSF-1 form</p>
         </Link>
-        <Link to={`/patient-resource-data?patientId=${patient.id}`} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
+        <Link to={`/patient-resource-data?patientId=${patient.id}`} className="bg-white p-3 sm:p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all group">
           <div className="w-12 h-12 rounded-2xl bg-partners-blue-dark/10 text-partners-blue-dark flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <FileText size={24} />
           </div>
@@ -726,7 +786,7 @@ export const PatientProfile: React.FC = () => {
           <h3 className="font-bold text-zinc-900">Clinical Forms</h3>
           <p className="text-xs text-zinc-500">Quickly create new clinical documentation</p>
         </div>
-        <div className="p-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Link to={`/progress-note?patientId=${patient.id}`} className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl hover:shadow-md transition-all group">
             <FileText className="w-8 h-8 text-emerald-600 mb-3 group-hover:scale-110 transition-transform" />
             <p className="text-sm font-bold text-zinc-900">Progress Note</p>
@@ -819,6 +879,60 @@ export const PatientProfile: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── Patient Files Section ── */}
+      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+          <h3 className="font-bold text-zinc-900 flex items-center gap-2">
+            <Paperclip size={18} className="text-partners-blue-dark" />
+            Documents &amp; Files
+            <span className="ml-2 text-xs font-normal text-zinc-400">{patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}</span>
+          </h3>
+          <div>
+            <input type="file" ref={fileInputRef} className="hidden"
+              onChange={e => { if (e.target.files?.[0]) { handleFileUpload(e.target.files[0]); e.target.value = ''; } }} />
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
+              {uploadingFile
+                ? <><Loader2 size={15} className="mr-2 animate-spin" /> Uploading...</>
+                : <><Upload size={15} className="mr-2" /> Upload File</>
+              }
+            </Button>
+          </div>
+        </div>
+        <div className="p-6">
+          {patientFiles.length === 0 ? (
+            <div className="text-center py-12 text-zinc-400">
+              <Paperclip size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm italic">No files uploaded yet.</p>
+              <p className="text-xs mt-1">Upload documents, lab results, or any relevant files for this patient.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {patientFiles.map(file => (
+                <div key={file.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl p-3 group">
+                  <div className="w-9 h-9 rounded-xl bg-partners-blue-dark/10 flex items-center justify-center shrink-0">
+                    <FileText size={16} className="text-partners-blue-dark" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-800 truncate">{file.name}</p>
+                    <p className="text-[10px] text-zinc-400">{file.size} · {new Date(file.uploaded_at).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a href={file.url} target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-partners-blue-dark hover:bg-white transition-colors">
+                      <Eye size={14} />
+                    </a>
+                    <button onClick={() => handleDeleteFile(file.id, file.url)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-white transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

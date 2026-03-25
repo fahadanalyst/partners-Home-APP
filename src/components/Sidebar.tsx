@@ -1,5 +1,5 @@
 import React from 'react';
-import { 
+import { Users2, 
   LayoutDashboard, 
   Users, 
   Calendar, 
@@ -27,18 +27,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const location = useLocation();
 
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['admin', 'manager', 'frontdesk', 'clinical_worker', 'reviewer', 'nurse'] },
-    { icon: Users, label: 'Patients', path: '/patients', roles: ['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse'] },
-    { icon: Stethoscope, label: 'Medical Providers', path: '/medical-providers', roles: ['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse'] },
-    { icon: UserPlus, label: 'Referrals', path: '/referrals', roles: ['admin', 'manager', 'frontdesk', 'clinical_worker', 'nurse'] },
-    { icon: Calendar, label: 'Schedule', path: '/schedule', roles: ['admin', 'manager', 'frontdesk', 'clinical_worker'] },
-    { icon: ClipboardList, label: 'Clinical Notes', path: '/notes', roles: ['admin', 'manager', 'clinical_worker', 'nurse'] },
-    { icon: FileText, label: 'Clinical Forms', path: '/clinical-forms', roles: ['admin', 'manager', 'clinical_worker', 'nurse', 'reviewer'] },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'reviewer', 'nurse'] },
+    { icon: Users, label: 'Patients', path: '/patients', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
+    { icon: Stethoscope, label: 'Medical Providers', path: '/medical-providers', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
+    { icon: UserPlus, label: 'Referrals', path: '/referrals', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
+    { icon: Calendar, label: 'Schedule', path: '/schedule', roles: ['admin', 'manager', 'frontdesk', 'care_manager'] },
+    { icon: ClipboardList, label: 'Clinical Notes', path: '/notes', roles: ['admin', 'manager', 'care_manager', 'nurse'] },
+    { icon: FileText, label: 'Clinical Forms', path: '/clinical-forms', roles: ['admin', 'manager', 'care_manager', 'nurse', 'reviewer'] },
     { icon: ShieldCheck, label: 'Compliance', path: '/compliance', roles: ['admin', 'reviewer'] },
     { icon: Settings, label: 'User Management', path: '/settings', roles: ['admin'] },
+    { icon: Users2, label: 'Staff Management', path: '/staff-management', roles: ['admin', 'manager'] },
   ];
 
-  const role = profile?.role || 'clinical_worker';
+  const role = profile?.role || 'care_manager';
   const filteredItems = menuItems.filter(item => item.roles.includes(role));
 
   return (

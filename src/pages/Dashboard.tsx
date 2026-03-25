@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -73,6 +74,8 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     checkConnection();
     fetchDashboardData();
+
+
   }, [timeRange]);
 
   const checkConnection = async () => {
@@ -334,3 +337,4 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+

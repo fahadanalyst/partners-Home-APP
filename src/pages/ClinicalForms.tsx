@@ -42,6 +42,7 @@ const forms = [
     color: 'bg-blue-100 text-blue-600'
   },
   {
+    // ← NOW uses the PDF viewer route
     id: 'physician-summary',
     title: 'Physician Summary (PSF-1)',
     description: 'Physician verification and validation of medical information.',
@@ -50,6 +51,7 @@ const forms = [
     color: 'bg-amber-100 text-amber-600'
   },
   {
+    // ← NOW uses the PDF viewer route
     id: 'request-for-services',
     title: 'Request for Services (RFS-1)',
     description: 'Clinical eligibility determination for requested services.',
@@ -74,6 +76,7 @@ const forms = [
     color: 'bg-purple-100 text-purple-600'
   },
   {
+    // ← NOW uses the PDF viewer route
     id: 'mds-assessment',
     title: 'MDS Assessment',
     description: 'Minimum Data Set assessment for care planning.',
@@ -128,6 +131,14 @@ const forms = [
     icon: FileText,
     path: '/discharge-summary',
     color: 'bg-red-50 text-red-700'
+  },
+  {
+    id: 'home-safety-inspection',
+    title: 'Home Safety Inspection',
+    description: 'Evaluate the patient\'s living environment for safety hazards.',
+    icon: ClipboardCheck,
+    path: '/home-safety-inspection',
+    color: 'bg-teal-100 text-teal-600'
   }
 ];
 
@@ -178,7 +189,6 @@ export const ClinicalForms: React.FC = () => {
         .eq('id', id);
       if (error) throw error;
       
-      // Refresh data from server to ensure sync
       await fetchRecentSubmissions();
       setNotification({ type: 'success', message: 'Submission deleted successfully' });
     } catch (error: any) {
@@ -328,6 +338,7 @@ export const ClinicalForms: React.FC = () => {
           </div>
         )}
       </div>
+
       <ConfirmationModal
         isOpen={!!submissionToDelete}
         onClose={() => setSubmissionToDelete(null)}
