@@ -15,7 +15,6 @@ interface Education {
   graduated: boolean;
   degree: string;
 }
-
 interface StaffCompliance {
   completedAssessment: boolean;
   completedAssessmentDate: string;
@@ -25,7 +24,6 @@ interface StaffCompliance {
   licenseExpiry: string;
   certifications: string;
 }
-
 interface StaffMember {
   id: string;
   name: string;
@@ -50,9 +48,7 @@ const EMPTY_COMPLIANCE: StaffCompliance = {
   semiAnnualStatusDate: '', monthlySupervisionDate: '',
   licenseNumber: '', licenseExpiry: '', certifications: '',
 };
-
 type StaffForm = Omit<StaffMember, 'id' | 'created_at'>;
-
 const EMPTY_FORM: StaffForm = {
   name: '', address: '', phone: '', email: '', date_of_hire: '',
   ssn: '', emergency_contact: '', emergency_phone: '', pay_rate_hourly: '',
@@ -81,6 +77,7 @@ export const StaffManagement: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState<StaffForm>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => { fetchStaff(); }, []);
 
@@ -140,7 +137,6 @@ export const StaffManagement: React.FC = () => {
     try {
       setSaving(true);
       setError(null);
-
       const payload = {
         name: form.name,
         address: form.address,
@@ -156,20 +152,13 @@ export const StaffManagement: React.FC = () => {
         compliance: form.compliance,
         status: form.status,
       };
-
       if (editing) {
-        const { error } = await supabase
-          .from('staff')
-          .update(payload)
-          .eq('id', editing.id);
+        const { error } = await supabase.from('staff').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('staff')
-          .insert([payload]);
+        const { error } = await supabase.from('staff').insert([payload]);
         if (error) throw error;
       }
-
       await fetchStaff();
       setShowModal(false);
       setEditing(null);
@@ -180,14 +169,22 @@ export const StaffManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this staff member? Their uploaded files will remain in storage.')) return;
+  // Opens the custom modal instead of browser confirm
+  const handleDelete = (id: string) => {
+    setDeleteConfirm(id);
+  };
+
+  // Called when user clicks "Delete Record" in the modal
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
     try {
-      const { error } = await supabase.from('staff').delete().eq('id', id);
+      const { error } = await supabase.from('staff').delete().eq('id', deleteConfirm);
       if (error) throw error;
-      setStaff(prev => prev.filter(s => s.id !== id));
+      setStaff(prev => prev.filter(s => s.id !== deleteConfirm));
     } catch (err: any) {
       setError('Failed to delete: ' + err.message);
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -207,6 +204,7 @@ export const StaffManagement: React.FC = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
@@ -244,8 +242,13 @@ export const StaffManagement: React.FC = () => {
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-        <input type="text" placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 rounded-2xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none bg-white" />
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-12 pr-4 py-3 rounded-2xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none bg-white"
+        />
       </div>
 
       {/* Staff List */}
@@ -260,6 +263,7 @@ export const StaffManagement: React.FC = () => {
           </div>
         ) : filtered.map(s => (
           <div key={s.id} className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+
             {/* Row header */}
             <div className="flex items-center justify-between p-4 sm:p-6">
               <div className="flex items-center gap-4">
@@ -283,8 +287,10 @@ export const StaffManagement: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(s)}><Edit2 size={15} /></Button>
                 <Button variant="ghost" size="sm" className="text-red-400" onClick={() => handleDelete(s.id)}><Trash2 size={15} /></Button>
-                <button onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                  className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors">
+                <button
+                  onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors"
+                >
                   {expandedId === s.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </button>
               </div>
@@ -294,6 +300,7 @@ export const StaffManagement: React.FC = () => {
             {expandedId === s.id && (
               <div className="border-t border-zinc-100 p-4 sm:p-6 space-y-6 bg-zinc-50/50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
                   {/* Personal info */}
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Personal Info</h4>
@@ -347,12 +354,9 @@ export const StaffManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* File Upload — now uses staff.id which exists in public.staff table */}
+                {/* File Upload */}
                 <div className="border-t border-zinc-200 pt-6">
-                  <FileUpload
-                    staffId={s.id}
-                    onUploadSuccess={() => {}}
-                  />
+                  <FileUpload staffId={s.id} onUploadSuccess={() => {}} />
                 </div>
               </div>
             )}
@@ -360,10 +364,64 @@ export const StaffManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* ── Delete Confirmation Modal ─────────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-md p-6 space-y-5">
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-zinc-900">Confirm Deletion</h3>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="text-zinc-400 hover:text-zinc-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <hr className="border-zinc-100" />
+
+            {/* Warning box */}
+            <div className="flex items-start gap-4 bg-red-50 border border-red-100 rounded-2xl p-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-red-500" />
+              </div>
+              <div>
+                <p className="font-bold text-red-700 text-sm">Are you sure?</p>
+                <p className="text-sm text-red-600 mt-0.5">
+                  This action cannot be undone and will permanently delete the staff member record.
+                  Their uploaded files will remain in storage.
+                </p>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2.5 rounded-2xl border border-zinc-200 text-zinc-700 font-semibold text-sm hover:bg-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2.5 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 size={15} />
+                Delete Record
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── Add / Edit Modal ──────────────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+
             <div className="flex items-center justify-between p-6 border-b border-zinc-100">
               <h3 className="text-xl font-bold text-zinc-900">{editing ? 'Edit Staff Member' : 'Add Staff Member'}</h3>
               <button onClick={() => setShowModal(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20} /></button>
@@ -470,9 +528,13 @@ export const StaffManagement: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-zinc-500 uppercase">Certifications</label>
-                  <textarea value={form.compliance.certifications} onChange={e => setComp('certifications', e.target.value)}
-                    rows={2} placeholder="e.g. CPR/AED, HIPAA Training, Wound Care Certification"
-                    className="w-full px-3 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none text-sm resize-none" />
+                  <textarea
+                    value={form.compliance.certifications}
+                    onChange={e => setComp('certifications', e.target.value)}
+                    rows={2}
+                    placeholder="e.g. CPR/AED, HIPAA Training, Wound Care Certification"
+                    className="w-full px-3 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none text-sm resize-none"
+                  />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.compliance.completedAssessment}
@@ -496,9 +558,11 @@ export const StaffManagement: React.FC = () => {
                 {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Staff Member'}
               </Button>
             </div>
+
           </div>
         </div>
       )}
+
     </div>
   );
 };
