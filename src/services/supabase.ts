@@ -129,7 +129,7 @@ export const testSupabaseConnection = async (): Promise<{ success: boolean; mess
       return { success: false, message: `Profiles table error: ${profileError.message}` };
     }
 
-    // 2. Check forms table
+    // 2. Check forms table — includes all original + 3 new forms
     const { data: forms, error: formsError } = await client.from('forms').select('name');
     if (formsError) {
       console.error('Supabase forms check error:', formsError);
@@ -137,6 +137,7 @@ export const testSupabaseConnection = async (): Promise<{ success: boolean; mess
     }
 
     const requiredForms = [
+      // ── Original forms ──────────────────────────────────────
       'GAFC Progress Note',
       'GAFC Care Plan',
       'Physician Summary (PSF-1)',
@@ -147,7 +148,11 @@ export const testSupabaseConnection = async (): Promise<{ success: boolean; mess
       'Nursing Assessment',
       'Medication Administration Record (MAR)',
       'Treatment Administration Record (TAR)',
-      'Clinical Note'
+      'Clinical Note',
+      // ── New forms ───────────────────────────────────────────
+      'Semi-Annual Health Status Report',
+      'GAFC Aide Care Plan',
+      'Medication List',
     ];
 
     const existingFormNames = forms?.map(f => f.name) || [];
@@ -288,10 +293,9 @@ export const warmupSupabase = async (): Promise<void> => {
 
   console.log('Supabase Service: Warming up database connection...');
   try {
-    // A simple query that should be fast and wake up the DB
     await withTimeout(
       client.from('forms').select('id').limit(1),
-      30000 // Increased to 30s for warm-up
+      30000
     );
     console.log('Supabase Service: Warm-up successful');
   } catch (err) {
@@ -311,7 +315,6 @@ export const initializeFormCache = async (): Promise<void> => {
     if (!client) return;
 
     try {
-      // Start warm-up in background, don't wait for it
       warmupSupabase();
 
       console.log('Supabase Service: Initializing form cache...');
@@ -323,14 +326,13 @@ export const initializeFormCache = async (): Promise<void> => {
             .from('forms')
             .select('id, name')
             .eq('is_active', true) as any,
-          20000 // 20s per attempt
+          20000
         )) as any;
         
         if (error) throw error;
         return data;
       };
 
-      // Use retry mechanism for the actual data fetch - 2 retries with 5s delay
       const data = await withRetry(fetchData, 2, 5000);
       
       if (data) {
@@ -344,7 +346,6 @@ export const initializeFormCache = async (): Promise<void> => {
       }
     } catch (err: any) {
       console.error('Supabase Service: Failed to initialize form cache after retries:', err.message || err);
-      // Don't throw here to avoid crashing the app, but log it clearly
     } finally {
       initializationPromise = null;
     }
@@ -368,18 +369,15 @@ export const waitForSupabaseInitialization = async (): Promise<void> => {
 export const getFormIdByName = async (name: string): Promise<string | null> => {
   const trimmedName = name.trim();
   
-  // Try to initialize cache if not already done
   if (!isCacheInitialized) {
     await initializeFormCache();
   }
 
-  // Check cache first
   if (formIdCache[trimmedName]) {
     console.log(`getFormIdByName: Cache hit for "${trimmedName}":`, formIdCache[trimmedName]);
     return formIdCache[trimmedName];
   }
 
-  // Case-insensitive check in cache
   const caseInsensitiveKey = Object.keys(formIdCache).find(
     key => key.toLowerCase().trim() === trimmedName.toLowerCase()
   );
@@ -396,7 +394,6 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
 
   console.log(`getFormIdByName: Cache miss for "${trimmedName}". Fetching from DB...`);
   try {
-    // Increase timeout and add more logging
     const { data, error } = (await withTimeout(
       client
         .from('forms')
@@ -404,12 +401,11 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
         .eq('name', trimmedName)
         .limit(1)
         .maybeSingle() as any,
-      60000 // Increased to 60 seconds
+      60000
     )) as any;
     
     if (error) {
       console.error(`getFormIdByName: Error for "${trimmedName}":`, error);
-      // Fallback to ilike immediately on error
       const { data: fallbackData } = (await withTimeout(
         client
           .from('forms')
@@ -417,7 +413,7 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
           .ilike('name', trimmedName)
           .limit(1)
           .maybeSingle() as any,
-        30000 // Increased to 30s for retry
+        30000
       )) as any;
       
       if (fallbackData) {
@@ -436,7 +432,7 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
           .ilike('name', trimmedName)
           .limit(1)
           .maybeSingle() as any,
-        30000 // Increased to 30s for retry
+        30000
       )) as any;
       
       if (retryData) {
@@ -446,7 +442,6 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
       }
 
       console.warn(`getFormIdByName: No form found with name "${trimmedName}" even after retry.`);
-      // Diagnostic check: list all forms and re-initialize cache
       isCacheInitialized = false;
       await initializeFormCache();
       
@@ -463,11 +458,6 @@ export const getFormIdByName = async (name: string): Promise<string | null> => {
     return null;
   }
 };
-
-/**
- * Helper to wrap a promise with a timeout.
- * (Moved to top of file)
- */
 
 export type UserRole = 'admin' | 'manager' | 'frontdesk' | 'care_manager' | 'reviewer' | 'nurse';
 

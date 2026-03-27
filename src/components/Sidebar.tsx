@@ -26,9 +26,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const { profile, signOut } = useAuth();
   const location = useLocation();
 
-  const menuItems = [
+const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'reviewer', 'nurse'] },
     { icon: Users, label: 'Patients', path: '/patients', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
+    { icon: Users2, label: 'Staff Management', path: '/staff-management', roles: ['admin', 'manager'] }, // 👈 moved here
     { icon: Stethoscope, label: 'Medical Providers', path: '/medical-providers', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
     { icon: UserPlus, label: 'Referrals', path: '/referrals', roles: ['admin', 'manager', 'frontdesk', 'care_manager', 'nurse'] },
     { icon: Calendar, label: 'Schedule', path: '/schedule', roles: ['admin', 'manager', 'frontdesk', 'care_manager'] },
@@ -36,7 +37,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     { icon: FileText, label: 'Clinical Forms', path: '/clinical-forms', roles: ['admin', 'manager', 'care_manager', 'nurse', 'reviewer'] },
     { icon: ShieldCheck, label: 'Compliance', path: '/compliance', roles: ['admin', 'reviewer'] },
     { icon: Settings, label: 'User Management', path: '/settings', roles: ['admin'] },
-    { icon: Users2, label: 'Staff Management', path: '/staff-management', roles: ['admin', 'manager'] },
   ];
 
   const role = profile?.role || 'care_manager';

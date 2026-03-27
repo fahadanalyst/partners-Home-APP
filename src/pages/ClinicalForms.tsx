@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  ClipboardList, 
-  Stethoscope, 
-  UserRound, 
+import {
+  FileText,
+  ClipboardList,
+  Stethoscope,
+  UserRound,
   FilePlus,
   ArrowRight,
   Pill,
@@ -42,7 +42,6 @@ const forms = [
     color: 'bg-blue-100 text-blue-600'
   },
   {
-    // ← NOW uses the PDF viewer route
     id: 'physician-summary',
     title: 'Physician Summary (PSF-1)',
     description: 'Physician verification and validation of medical information.',
@@ -51,13 +50,28 @@ const forms = [
     color: 'bg-amber-100 text-amber-600'
   },
   {
-    // ← NOW uses the PDF viewer route
     id: 'request-for-services',
     title: 'Request for Services (RFS-1)',
     description: 'Clinical eligibility determination for requested services.',
     icon: FileText,
     path: '/request-for-services',
     color: 'bg-rose-100 text-rose-600'
+  },
+  {
+    id: 'mds-assessment',
+    title: 'MDS Assessment',
+    description: 'Minimum Data Set assessment for care planning.',
+    icon: FileText,
+    path: '/mds-assessment',
+    color: 'bg-cyan-100 text-cyan-600'
+  },
+  {
+    id: 'cirf',
+    title: 'CIRF',
+    description: 'MassHealth Community Services Critical Incident Report Form.',
+    icon: FileText,
+    path: '/cirf',
+    color: 'bg-purple-100 text-purple-600'
   },
   {
     id: 'patient-resource-data',
@@ -74,15 +88,6 @@ const forms = [
     icon: FileText,
     path: '/physician-orders',
     color: 'bg-purple-100 text-purple-600'
-  },
-  {
-    // ← NOW uses the PDF viewer route
-    id: 'mds-assessment',
-    title: 'MDS Assessment',
-    description: 'Minimum Data Set assessment for care planning.',
-    icon: FileText,
-    path: '/mds-assessment',
-    color: 'bg-cyan-100 text-cyan-600'
   },
   {
     id: 'nursing-assessment',
@@ -135,11 +140,36 @@ const forms = [
   {
     id: 'home-safety-inspection',
     title: 'Home Safety Inspection',
-    description: 'Evaluate the patient\'s living environment for safety hazards.',
+    description: "Evaluate the patient's living environment for safety hazards.",
     icon: ClipboardCheck,
     path: '/home-safety-inspection',
     color: 'bg-teal-100 text-teal-600'
-  }
+  },
+  // ── NEW FORMS ──
+  {
+    id: 'semi-annual-health-status',
+    title: 'Semi-Annual Health Status Report',
+    description: 'GAFC bi-annual nursing review and PCP certification form.',
+    icon: FileText,
+    path: '/semi-annual-health-status',
+    color: 'bg-sky-100 text-sky-600'
+  },
+  {
+    id: 'gafc-aide-care-plan',
+    title: 'GAFC Aide Care Plan',
+    description: 'Home Health Aide care plan covering ADLs, equipment, and service schedule.',
+    icon: FileText,
+    path: '/gafc-aide-care-plan',
+    color: 'bg-violet-100 text-violet-600'
+  },
+  {
+    id: 'medication-list',
+    title: 'Medication List',
+    description: 'Client medication record with dose, route, frequency, and review tracking.',
+    icon: Pill,
+    path: '/medication-list',
+    color: 'bg-rose-100 text-rose-600'
+  },
 ];
 
 export const ClinicalForms: React.FC = () => {
@@ -170,7 +200,6 @@ export const ClinicalForms: React.FC = () => {
         `)
         .order('created_at', { ascending: false })
         .limit(10);
-
       if (error) throw error;
       setRecentSubmissions(data || []);
     } catch (error) {
@@ -188,7 +217,6 @@ export const ClinicalForms: React.FC = () => {
         .delete()
         .eq('id', id);
       if (error) throw error;
-      
       await fetchRecentSubmissions();
       setNotification({ type: 'success', message: 'Submission deleted successfully' });
     } catch (error: any) {
@@ -214,8 +242,8 @@ export const ClinicalForms: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {forms.map((form) => (
-          <Link 
-            key={form.id} 
+          <Link
+            key={form.id}
             to={form.path}
             className="group bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all hover:border-partners-blue-dark"
           >
@@ -228,9 +256,7 @@ export const ClinicalForms: React.FC = () => {
               </div>
             </div>
             <h3 className="text-lg font-bold text-zinc-900 mb-2">{form.title}</h3>
-            <p className="text-sm text-zinc-500 leading-relaxed">
-              {form.description}
-            </p>
+            <p className="text-sm text-zinc-500 leading-relaxed">{form.description}</p>
           </Link>
         ))}
       </div>
@@ -275,7 +301,9 @@ export const ClinicalForms: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-sm text-zinc-600">
                           <User size={14} className="text-zinc-400" />
-                          {submission.patients ? `${submission.patients.first_name} ${submission.patients.last_name}` : 'N/A'}
+                          {submission.patients
+                            ? `${submission.patients.first_name} ${submission.patients.last_name}`
+                            : 'N/A'}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-zinc-500">
@@ -284,19 +312,20 @@ export const ClinicalForms: React.FC = () => {
                       <td className="px-6 py-4">
                         <span className={clsx(
                           'px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
-                          submission.status === 'submitted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          submission.status === 'submitted'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-amber-100 text-amber-700'
                         )}>
                           {submission.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right relative">
-                        <button 
+                        <button
                           onClick={() => setActiveMenu(activeMenu === submission.id ? null : submission.id)}
                           className="p-2 text-zinc-400 hover:text-zinc-600 transition-colors"
                         >
                           <MoreVertical size={18} />
                         </button>
-                        
                         {activeMenu === submission.id && (
                           <div className="absolute right-6 mt-2 w-32 bg-white rounded-xl border border-zinc-200 shadow-xl z-50 overflow-hidden">
                             <button
@@ -350,10 +379,10 @@ export const ClinicalForms: React.FC = () => {
       />
 
       {notification && (
-        <Notification 
-          type={notification.type} 
-          message={notification.message} 
-          onClose={() => setNotification(null)} 
+        <Notification
+          type={notification.type}
+          message={notification.message}
+          onClose={() => setNotification(null)}
         />
       )}
     </div>

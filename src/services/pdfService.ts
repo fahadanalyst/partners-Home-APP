@@ -18,6 +18,11 @@ import { PatientResourceDataTemplate } from '../components/PDFTemplates/PatientR
 import { PatientSummaryTemplate } from '../components/PDFTemplates/PatientSummaryTemplate';
 import { HomeSafetyInspectionTemplate } from '../components/PDFTemplates/HomeSafetyInspectionTemplate';
 
+// ── NEW templates ─────────────────────────────────────────────────────────────
+import { SemiAnnualHealthStatusReportTemplate } from '../components/PDFTemplates/SemiAnnualHealthStatusReportTemplate';
+import { GAFCAideCarePlanTemplate } from '../components/PDFTemplates/GAFCAideCarePlanTemplate';
+import { MedicationListTemplate } from '../components/PDFTemplates/MedicationListTemplate';
+
 // ── Forms routed to editable PDF templates ───────────────────────────────────
 // These 3 use pdf-lib to fill the government PDFs in /public/pdfs/
 // Update these filenames if your actual files are named differently.
@@ -29,18 +34,22 @@ const GOVERNMENT_PDF_TEMPLATES: Record<string, string> = {
 
 // ── Forms still using react-pdf/renderer ─────────────────────────────────────
 const REACT_PDF_TEMPLATE_MAP: Record<string, any> = {
-  'GAFC Progress Note':                    GAFCProgressNoteTemplate,
-  'GAFC Care Plan':                        GAFCCarePlanTemplate,
-  'Nursing Assessment':                    NursingAssessmentTemplate,
-  'Physician Orders':                      PhysicianOrdersTemplate,
-  'Admission Assessment':                  AdmissionAssessmentTemplate,
-  'Discharge Summary':                     DischargeSummaryTemplate,
+  'GAFC Progress Note':                     GAFCProgressNoteTemplate,
+  'GAFC Care Plan':                         GAFCCarePlanTemplate,
+  'Nursing Assessment':                     NursingAssessmentTemplate,
+  'Physician Orders':                       PhysicianOrdersTemplate,
+  'Admission Assessment':                   AdmissionAssessmentTemplate,
+  'Discharge Summary':                      DischargeSummaryTemplate,
   'Medication Administration Record (MAR)': MAR_Template,
-  'Treatment Administration Record (TAR)': TAR_Template,
-  'Clinical Note':                         ClinicalNoteTemplate,
-  'Patient Resource Data':                 PatientResourceDataTemplate,
-  'Patient Summary':                       PatientSummaryTemplate,
-  'Home Safety Inspection':                HomeSafetyInspectionTemplate,
+  'Treatment Administration Record (TAR)':  TAR_Template,
+  'Clinical Note':                          ClinicalNoteTemplate,
+  'Patient Resource Data':                  PatientResourceDataTemplate,
+  'Patient Summary':                        PatientSummaryTemplate,
+  'Home Safety Inspection':                 HomeSafetyInspectionTemplate,
+  // ── NEW ──
+  'Semi-Annual Health Status Report':       SemiAnnualHealthStatusReportTemplate,
+  'GAFC Aide Care Plan':                    GAFCAideCarePlanTemplate,
+  'Medication List':                        MedicationListTemplate,
 };
 
 // ── Field-map builders for the 3 government forms ────────────────────────────
