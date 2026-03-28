@@ -19,9 +19,9 @@ import { PatientSummaryTemplate } from '../components/PDFTemplates/PatientSummar
 import { HomeSafetyInspectionTemplate } from '../components/PDFTemplates/HomeSafetyInspectionTemplate';
 
 // ── NEW templates ─────────────────────────────────────────────────────────────
-import { SemiAnnualHealthStatusReportTemplate } from '../components/PDFTemplates/SemiAnnualHealthStatusReportTemplate';
-import { GAFCAideCarePlanTemplate } from '../components/PDFTemplates/GAFCAideCarePlanTemplate';
-import { MedicationListTemplate } from '../components/PDFTemplates/MedicationListTemplate';
+import { SemiAnnualHealthStatusReportTemplate } from '../components/PDFTemplates/Semiannualhealthstatusreporttemplate';
+import { GAFCAideCarePlanTemplate } from '../components/PDFTemplates/Gafcaidecareplantemplate';
+import { MedicationListTemplate } from '../components/PDFTemplates/Medicationlisttemplate';
 
 // ── Forms routed to editable PDF templates ───────────────────────────────────
 // These 3 use pdf-lib to fill the government PDFs in /public/pdfs/
