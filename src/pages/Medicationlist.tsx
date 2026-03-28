@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { Notification, NotificationType } from '../components/Notification';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
-import { MedicationListTemplate } from '../components/PDFTemplates/MedicationListTemplate';
+import { MedicationListTemplate } from '../components/PDFTemplates/Medicationlisttemplate';
 import { Logo } from '../components/Logo';
 
 const FORM_NAME = 'Medication List';
