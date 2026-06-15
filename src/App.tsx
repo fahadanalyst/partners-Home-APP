@@ -1,0 +1,513 @@
+import React, { useState, useEffect, Suspense } from 'react';
+import { useAuth } from './context/AuthContext';
+import { Sidebar } from './components/Sidebar';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { Shield, Lock, Mail, AlertCircle, Menu, Eye, EyeOff } from 'lucide-react';
+import { Button } from './components/Button';
+import { supabase, withTimeout } from './services/supabase';
+import { clsx } from 'clsx';
+import { Logo } from './components/Logo';
+
+const Dashboard = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const GAFCProgressNote = React.lazy(() => import('./pages/GAFCProgressNote').then(m => ({ default: m.GAFCProgressNote })));
+const GAFCCarePlan = React.lazy(() => import('./pages/GAFCCarePlan').then(m => ({ default: m.GAFCCarePlan })));
+const ClinicalForms = React.lazy(() => import('./pages/ClinicalForms').then(m => ({ default: m.ClinicalForms })));
+const PhysicianSummary = React.lazy(() => import('./pages/PhysicianSummary').then(m => ({ default: m.PhysicianSummary })));
+const RequestForServices = React.lazy(() => import('./pages/RequestForServices').then(m => ({ default: m.RequestForServices })));
+const PatientResourceData = React.lazy(() => import('./pages/PatientResourceData').then(m => ({ default: m.PatientResourceData })));
+const PhysicianOrders = React.lazy(() => import('./pages/PhysicianOrders').then(m => ({ default: m.PhysicianOrders })));
+const MDSAssessment = React.lazy(() => import('./components/PDFTemplates/MDSAssessmentTemplate').then(m => ({ default: m.MDSAssessment })));
+const NursingAssessment = React.lazy(() => import('./pages/NursingAssessment').then(m => ({ default: m.NursingAssessment })));
+const CIRF = React.lazy(() => import('./pages/cirf').then(m => ({ default: m.CIRF })));
+const MedicationAdministrationRecord = React.lazy(() => import('./pages/MedicationAdministrationRecord').then(m => ({ default: m.MedicationAdministrationRecord })));
+const TreatmentAdministrationRecord = React.lazy(() => import('./pages/TreatmentAdministrationRecord').then(m => ({ default: m.TreatmentAdministrationRecord })));
+const ClinicalNoteForm = React.lazy(() => import('./pages/ClinicalNoteForm').then(m => ({ default: m.ClinicalNoteForm })));
+const AdmissionAssessment = React.lazy(() => import('./pages/AdmissionAssessment').then(m => ({ default: m.AdmissionAssessment })));
+const DischargeSummary = React.lazy(() => import('./pages/DischargeSummary').then(m => ({ default: m.DischargeSummary })));
+const UserManagement = React.lazy(() => import('./pages/UserManagement').then(m => ({ default: m.UserManagement })));
+const StaffManagement = React.lazy(() => import('./pages/StaffManagement').then(m => ({ default: m.StaffManagement })));
+const HomeSafetyInspection = React.lazy(() => import('./pages/HomeSafetyInspection').then(m => ({ default: m.HomeSafetyInspection })));
+const Patients = React.lazy(() => import('./pages/Patients').then(m => ({ default: m.Patients })));
+const PatientProfile = React.lazy(() => import('./pages/PatientProfile').then(m => ({ default: m.PatientProfile })));
+const Schedule = React.lazy(() => import('./pages/Schedule').then(m => ({ default: m.Schedule })));
+const MedicalProviders = React.lazy(() => import('./pages/MedicalProviders').then(m => ({ default: m.MedicalProviders })));
+const ClinicalNotes = React.lazy(() => import('./pages/ClinicalNotes').then(m => ({ default: m.ClinicalNotes })));
+const Compliance = React.lazy(() => import('./pages/Compliance').then(m => ({ default: m.Compliance })));
+const Referrals = React.lazy(() => import('./pages/Referrals').then(m => ({ default: m.Referrals })));
+const SemiAnnualHealthStatusReport = React.lazy(() => import('./pages/Semiannualhealthstatusreport').then(m => ({ default: m.SemiAnnualHealthStatusReport })));
+const GAFCAideCarePlan = React.lazy(() => import('./pages/Gafcaidecareplan').then(m => ({ default: m.GAFCAideCarePlan })));
+const MedicationList = React.lazy(() => import('./pages/Medicationlist').then(m => ({ default: m.MedicationList })));
+
+const LoadingScreen: React.FC = () => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
+    <div className="max-w-md w-full flex flex-col items-center space-y-6 animate-pulse">
+      <Logo size={100} />
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-partners-blue-dark italic">Partners Home</h1>
+        <p className="text-partners-gray uppercase tracking-widest text-sm font-bold mt-2">Nursing Services</p>
+      </div>
+      <div className="w-48 h-1 bg-zinc-200 rounded-full overflow-hidden">
+        <div className="h-full bg-partners-blue-dark animate-[loading_1.5s_ease-in-out_infinite]"></div>
+      </div>
+    </div>
+  </div>
+);
+
+const Login: React.FC = () => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Login attempt started for:', email);
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('Calling supabase.auth.signInWithPassword for:', email);
+      const startTime = Date.now();
+      const { data, error } = (await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password
+        }),
+        120000
+      )) as any;
+      const duration = Date.now() - startTime;
+      console.log(`Supabase sign in response received after ${duration}ms:`, { hasData: !!data, hasError: !!error });
+      if (error) {
+        console.error('Sign in error details:', error);
+        if (error.message === 'Invalid login credentials' || error.message === 'Supabase not configured') {
+          setError('Invalid email or password. Please check your credentials and try again.');
+        } else if (error.message.includes('Database error querying schema')) {
+          setError('Database connection error. This usually happens if the .env file is missing or the database is temporarily unavailable. Please contact the administrator.');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        console.log('Sign in successful, verifying session manually...');
+        const { data: sessionData } = await supabase.auth.getSession();
+        console.log('Manual session check result:', !!sessionData?.session?.user);
+        if (sessionData?.session?.user) {
+          console.log('Session verified, navigating to dashboard...');
+          navigate('/', { replace: true });
+        }
+      }
+    } catch (err: any) {
+      console.error('Unexpected login error caught:', err);
+      if (err.message?.includes('timed out')) {
+        setError('Login request timed out. This can happen if the service is cold-starting. Please try clicking "Sign In" again in a few seconds.');
+      } else {
+        setError(err.message || 'An unexpected error occurred.');
+      }
+    } finally {
+      console.log('Login process finished, clearing loading state');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-zinc-200 p-8 space-y-8">
+        <div className="text-center flex flex-col items-center">
+          <Logo size={80} className="mb-4" />
+          <h1 className="text-2xl font-bold text-partners-blue-dark italic">Partners Home</h1>
+          <p className="text-partners-gray uppercase tracking-widest text-xs font-bold">Nursing Services HIPAA Portal</p>
+        </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-zinc-700">Email Address</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none transition-all"
+                placeholder="admin@clinicaflow.com"
+                required
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-zinc-700">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-10 pr-12 py-3 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none transition-all"
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-2"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+              <AlertCircle className="text-red-600 shrink-0" size={18} />
+              <p className="text-sm text-red-600 font-medium">{error}</p>
+            </div>
+          )}
+          <Button type="submit" className="w-full py-4 text-lg" disabled={loading}>
+            {loading ? 'Signing In...' : 'Sign In'}
+          </Button>
+        </form>
+        <div className="pt-4 border-t border-zinc-100 text-center">
+          <p className="text-xs text-zinc-400">
+            This is a HIPAA-compliant system. All access is monitored and logged.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RoleProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: string[] }> = ({ children, allowedRoles }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!profile || !allowedRoles.includes(profile.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
+const Layout: React.FC = () => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  return (
+    <div className="flex h-screen bg-zinc-50 overflow-hidden relative">
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+      <div className={clsx(
+        "fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 lg:relative lg:translate-x-0",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <Sidebar onClose={() => setIsSidebarOpen(false)} />
+      </div>
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="lg:hidden h-16 bg-white border-b border-zinc-200 flex items-center px-4 shrink-0">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 text-zinc-600 hover:bg-zinc-100 rounded-lg"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="ml-4">
+            <Logo size={32} />
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto">
+          <Suspense fallback={<LoadingScreen />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const { user, loading } = useAuth();
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkConfig = () => {
+      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        setConfigError('Supabase configuration is missing. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment variables in the Secrets panel.');
+      }
+    };
+    checkConfig();
+  }, []);
+
+  if (configError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4 text-center">
+        <div className="max-w-md bg-white p-8 rounded-3xl shadow-xl border border-zinc-200">
+          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Shield size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-zinc-900 mb-2">Configuration Required</h2>
+          <p className="text-zinc-600 mb-6">{configError}</p>
+          <div className="text-xs text-zinc-400 bg-zinc-50 p-4 rounded-xl text-left">
+            <p className="font-bold mb-1">Steps to fix:</p>
+            <ol className="list-decimal ml-4 space-y-1">
+              <li>Open the Secrets panel in AI Studio.</li>
+              <li>Add <code>VITE_SUPABASE_URL</code> with your project URL.</li>
+              <li>Add <code>VITE_SUPABASE_ANON_KEY</code> with your anon key.</li>
+              <li>The app will restart automatically.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route
+          path="/login"
+          element={!user ? <Login /> : <Navigate to="/" replace />}
+        />
+
+        {/* Protected Routes */}
+        <Route
+          path="/"
+          element={user ? <Layout /> : <Navigate to="/login" replace />}
+        >
+          <Route index element={<Dashboard />} />
+
+          <Route
+            path="patients"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
+                <Patients />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="patient-profile/:id"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
+                <PatientProfile />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="medical-providers"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
+                <MedicalProviders />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="schedule"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager']}>
+                <Schedule />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="notes"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse']}>
+                <ClinicalNotes />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="clinical-forms"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <ClinicalForms />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="progress-note"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <GAFCProgressNote />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="care-plan"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <GAFCCarePlan />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="physician-summary"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <PhysicianSummary />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="request-for-services"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <RequestForServices />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="patient-resource-data"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <PatientResourceData />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="physician-orders"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <PhysicianOrders />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="mds-assessment"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <MDSAssessment />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="nursing-assessment"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <NursingAssessment />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="cirf"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <CIRF />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="mar"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <MedicationAdministrationRecord />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="tar"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <TreatmentAdministrationRecord />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="clinical-note-form"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <ClinicalNoteForm />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="admission-assessment"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <AdmissionAssessment />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="discharge-summary"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <DischargeSummary />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="home-safety-inspection"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse']}>
+                <HomeSafetyInspection />
+              </RoleProtectedRoute>
+            }
+          />
+
+          {/* ── NEW ROUTES ── */}
+          <Route
+            path="semi-annual-health-status"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <SemiAnnualHealthStatusReport />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="gafc-aide-care-plan"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <GAFCAideCarePlan />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="medication-list"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'care_manager', 'nurse', 'reviewer']}>
+                <MedicationList />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route
+            path="compliance"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'reviewer']}>
+                <Compliance />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="referrals"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager', 'frontdesk', 'care_manager', 'nurse']}>
+                <Referrals />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin']}>
+                <UserManagement />
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="staff-management"
+            element={
+              <RoleProtectedRoute allowedRoles={['admin', 'manager']}>
+                <StaffManagement />
+              </RoleProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </Router>
+  );
+}
