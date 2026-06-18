@@ -6,7 +6,8 @@ import * as z from 'zod';
 import { Button } from '../components/Button';
 import { Home, Send, User, Calendar, ArrowLeft, Loader2, Download } from 'lucide-react';
 import { SignaturePad } from '../components/SignaturePad';
-import { supabase, getFormIdByName, withTimeout } from '../services/supabase';
+import { Notification, NotificationType } from '../components/Notification';
+import { supabase, getFormIdByName, withTimeout, invalidateFormCache } from '../services/supabase';
 import { generateFormPDF } from '../services/pdfService';
 import { useAuth } from '../context/AuthContext';
 
@@ -93,6 +94,10 @@ export const HomeSafetyInspection: React.FC = () => {
   const [isFetchingPatients, setIsFetchingPatients] = useState(true);
   const [formId, setFormId] = useState<string | null>(null);
   const [isFetchingForm, setIsFetchingForm] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [notification, setNotification] = useState<{ type: NotificationType; message: string } | null>(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
 
   const {
     register,
@@ -152,7 +157,10 @@ export const HomeSafetyInspection: React.FC = () => {
             .select('*')
             .eq('id', editId)
             .maybeSingle();
-          if (data && !error) reset(data.data);
+          if (data && !error) {
+            if ((data as any).patient_id) setSelectedPatientId((data as any).patient_id);
+            reset((data as any).data);
+          }
         } catch (err) {
           console.error('HomeSafetyInspection: Error fetching submission:', err);
         }
@@ -206,25 +214,46 @@ export const HomeSafetyInspection: React.FC = () => {
 
   const onSubmit = async (data: HomeSafetyFormValues) => {
     if (!profile) {
-      alert('You must be logged in to submit forms.');
+      setSubmitError('You must be logged in to submit forms.');
       return;
     }
+    if (!selectedPatientId) {
+      setSubmitError('Please select a patient before submitting.');
+      return;
+    }
+    setSubmitError(null);
     try {
       let currentFormId = formId;
       if (!currentFormId) {
         currentFormId = (await withTimeout(getFormIdByName(FORM_NAME))) as any;
         if (!currentFormId) {
-          throw new Error(`The "${FORM_NAME}" form is missing from the database.`);
+          await fetch('/api/setup-database', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          invalidateFormCache();
+          currentFormId = await getFormIdByName(FORM_NAME);
+        }
+        if (!currentFormId) {
+          throw new Error(`The "${FORM_NAME}" form is missing from the database. Please contact your administrator.`);
         }
         setFormId(currentFormId);
       }
 
       let responseData: any = null;
+      const payload = {
+        ...data,
+        form_name: FORM_NAME,
+        submitted_at: new Date().toISOString(),
+      };
 
       if (editId) {
         const { data: upData, error: upErr } = await supabase
           .from('form_responses')
-          .update({ data: data, status: 'submitted', updated_at: new Date().toISOString() })
+          .update({
+            form_id: currentFormId,
+            patient_id: selectedPatientId,
+            data: payload,
+            status: 'submitted',
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', editId)
           .select('id')
           .maybeSingle();
@@ -235,9 +264,9 @@ export const HomeSafetyInspection: React.FC = () => {
           .from('form_responses')
           .insert([{
             form_id: currentFormId,
-            patient_id: selectedPatientId || '00000000-0000-0000-0000-000000000000',
+            patient_id: selectedPatientId,
             staff_id: profile.id,
-            data: data,
+            data: payload,
             status: 'submitted',
           }])
           .select('id')
@@ -259,16 +288,19 @@ export const HomeSafetyInspection: React.FC = () => {
           }]);
       }
 
-      alert('Home Safety Inspection submitted successfully!');
+      setSubmitError(null);
+      setNotification({ type: 'success', message: editId ? 'Home Safety Inspection updated successfully!' : 'Home Safety Inspection submitted successfully!' });
       reset();
     } catch (error: any) {
       console.error('Error submitting form:', error);
-      alert(`Error: ${error.message}`);
+      setSubmitError(`Error: ${error.message}`);
     }
   };
 
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const formRef = React.useRef<HTMLFormElement>(null);
+  const onInvalid = () => {
+    setSubmitError('Please complete the required patient, client name, date, and inspector signature fields.');
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
 
   const handlePrint = async () => {
     try {
@@ -284,7 +316,7 @@ export const HomeSafetyInspection: React.FC = () => {
       }
     } catch (error) {
       console.error('PDF error:', error);
-      alert('Failed to generate PDF. Please try again.');
+      setNotification({ type: 'error', message: 'Failed to generate PDF. Please try again.' });
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -353,7 +385,7 @@ export const HomeSafetyInspection: React.FC = () => {
             )}
             {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+          <Button onClick={handleSubmit(onSubmit, onInvalid)} disabled={isSubmitting}>
             <Send className="w-4 h-4 mr-2" />
             {isSubmitting ? 'Submitting...' : 'Submit Inspection'}
           </Button>
@@ -362,9 +394,14 @@ export const HomeSafetyInspection: React.FC = () => {
 
       <form
         ref={formRef}
-        onSubmit={handleSubmit(onSubmit)}
+        onSubmit={handleSubmit(onSubmit, onInvalid)}
         className="space-y-8 bg-white p-8 rounded-2xl border border-zinc-200 shadow-sm"
       >
+        {submitError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+            {submitError}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-1">
             <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
@@ -531,6 +568,13 @@ export const HomeSafetyInspection: React.FC = () => {
           </div>
         </section>
       </form>
+      {notification && (
+        <Notification
+          type={notification.type}
+          message={notification.message}
+          onClose={() => setNotification(null)}
+        />
+      )}
     </div>
   );
 };

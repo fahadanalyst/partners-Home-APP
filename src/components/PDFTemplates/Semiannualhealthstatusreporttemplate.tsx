@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from '@react-pdf/renderer';
-import { BasePDFTemplate, shared, BRAND, RadioGroup } from './BasePDFTemplate';
+import { BasePDFTemplate, shared, BRAND, RadioGroup, CheckSquare } from './BasePDFTemplate';
 
 const s = StyleSheet.create({
   checkRow: {
@@ -129,10 +129,8 @@ export const SemiAnnualHealthStatusReportTemplate: React.FC<{ data: any }> = ({ 
 
       <View style={shared.card}>
         <View style={[s.checkRow, { marginBottom: 8 }]}>
-          <View style={s.checkBoxFilled}>
-            <Text style={s.checkMark}>✓</Text>
-          </View>
-          <Text style={[shared.value, { fontFamily: 'Helvetica-Bold' }]}>
+          <CheckSquare checked={true} />
+          <Text style={[shared.value, { fontFamily: 'Helvetica-Bold', marginLeft: 6 }]}>
             Client Medications / Client Care Plan: see attached for PCP review
           </Text>
         </View>

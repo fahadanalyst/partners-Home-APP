@@ -59,6 +59,16 @@ const FORM_ROUTES: Record<string, string> = {
   'Discharge Summary': '/discharge-summary',
 };
 
+const resolveSubmissionFormName = (submission: any) => {
+  const linkedForm = Array.isArray(submission.forms) ? submission.forms[0] : submission.forms;
+  if (linkedForm?.name) return linkedForm.name;
+  if (submission.data?.form_name) return submission.data.form_name;
+  if (submission.data?.dischargeReason || submission.data?.summary) return 'Discharge Summary';
+  if (submission.data?.assessment) return 'Admission Assessment';
+  if (submission.data?.bathroom && submission.data?.safetyEquipment) return 'Home Safety Inspection';
+  return 'Unknown Form';
+};
+
 const statusStyle = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'submitted': return 'bg-emerald-100 text-emerald-700';
@@ -871,7 +881,7 @@ export const Dashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {allForms.map((fr, idx) => {
-                  const formName = fr.forms?.name ?? fr.data?.form_name ?? 'Unknown Form';
+                  const formName = resolveSubmissionFormName(fr);
                   const patientName = fr.patients
                     ? `${fr.patients.last_name}, ${fr.patients.first_name}`
                     : '—';

@@ -287,6 +287,18 @@ const FORM_ROUTES: Record<string, string> = {
   'GAFC Aide Care Plan': '/gafc-aide-care-plan',
   'Medication List': '/medication-list',
   'Home Safety Inspection': '/home-safety-inspection',
+  'Admission Assessment': '/admission-assessment',
+  'Discharge Summary': '/discharge-summary',
+};
+
+const resolveSubmissionFormName = (submission: any) => {
+  const linkedForm = Array.isArray(submission.forms) ? submission.forms[0] : submission.forms;
+  if (linkedForm?.name) return linkedForm.name;
+  if (submission.data?.form_name) return submission.data.form_name;
+  if (submission.data?.dischargeReason || submission.data?.summary) return 'Discharge Summary';
+  if (submission.data?.assessment) return 'Admission Assessment';
+  if (submission.data?.bathroom && submission.data?.safetyEquipment) return 'Home Safety Inspection';
+  return 'Unknown Form';
 };
 
 const formStatusStyle = (status: string) => {
@@ -861,7 +873,7 @@ export const PatientProfile: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {submittedForms.map(fr => {
-                const formName = fr.forms?.name ?? fr.data?.form_name ?? 'Unknown Form';
+                const formName = resolveSubmissionFormName(fr);
                 const routePath = FORM_ROUTES[formName];
                 const viewUrl = routePath
                   ? `${routePath}?patientId=${patient?.id}&id=${fr.id}`

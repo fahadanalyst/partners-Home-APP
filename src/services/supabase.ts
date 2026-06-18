@@ -155,6 +155,9 @@ export const testSupabaseConnection = async (): Promise<{ success: boolean; mess
       'Medication Administration Record (MAR)',
       'Treatment Administration Record (TAR)',
       'Clinical Note',
+      'Admission Assessment',
+      'Discharge Summary',
+      'Home Safety Inspection',
       // ── New forms ───────────────────────────────────────────
       'Semi-Annual Health Status Report',
       'GAFC Aide Care Plan',
@@ -358,6 +361,17 @@ export const initializeFormCache = async (): Promise<void> => {
   })();
 
   return initializationPromise;
+};
+
+/**
+ * Resets the in-memory form ID cache so the next call to getFormIdByName
+ * will re-fetch from the database. Call this after seeding new forms via
+ * the /api/setup-database endpoint.
+ */
+export const invalidateFormCache = (): void => {
+  formIdCache = {};
+  isCacheInitialized = false;
+  initializationPromise = null;
 };
 
 /**

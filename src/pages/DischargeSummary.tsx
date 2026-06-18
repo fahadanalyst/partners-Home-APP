@@ -8,13 +8,14 @@ import { ClipboardCheck, Send, ArrowLeft, Loader2, FileText, User } from 'lucide
 import { SignaturePad } from '../components/SignaturePad';
 import { Logo } from '../components/Logo';
 import { Notification, NotificationType } from '../components/Notification';
-import { supabase, getFormIdByName, withTimeout, withRetry } from '../services/supabase';
+import { supabase, getFormIdByName, withTimeout, withRetry, invalidateFormCache } from '../services/supabase';
 import { generateFormPDF } from '../services/pdfService';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { DischargeSummaryTemplate } from '../components/PDFTemplates/DischargeSummaryTemplate';
 import { useAuth } from '../context/AuthContext';
 
 const DUMMY_PATIENT_ID = '00000000-0000-0000-0000-000000000000';
+const FORM_NAME = 'Discharge Summary';
 
 const dischargeSchema = z.object({
   date: z.string().min(1, 'Required'),
@@ -91,7 +92,10 @@ export const DischargeSummary: React.FC = () => {
             .select('*')
             .eq('id', editId)
             .maybeSingle();
-          if (data && !error) reset(data.data);
+          if (data && !error) {
+            if ((data as any).patient_id) setSelectedPatientId((data as any).patient_id);
+            reset((data as any).data);
+          }
         } catch (err) {
           console.error('DischargeSummary: Error fetching submission:', err);
         }
@@ -109,21 +113,39 @@ export const DischargeSummary: React.FC = () => {
     setIsSubmitting(true);
     try {
       let error: any = null;
+      let formId = await getFormIdByName(FORM_NAME);
+      if (!formId) {
+        await fetch('/api/setup-database', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        invalidateFormCache();
+        formId = await getFormIdByName(FORM_NAME);
+      }
+      if (!formId) throw new Error(`The "${FORM_NAME}" form is missing from the database. Please contact your administrator.`);
+
+      const payload = {
+        ...data,
+        form_name: FORM_NAME,
+        submitted_at: new Date().toISOString(),
+      };
 
       if (editId) {
         const { error: upErr } = await supabase
           .from('form_responses')
-          .update({ data: data, status: 'submitted', updated_at: new Date().toISOString() })
+          .update({
+            form_id: formId,
+            patient_id: selectedPatientId,
+            data: payload,
+            status: 'submitted',
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', editId);
         error = upErr;
       } else {
-        const formId = await getFormIdByName('Discharge Summary');
         const { error: inErr } = await withRetry(() => withTimeout(
           supabase.from('form_responses').insert([{
             form_id: formId,
             patient_id: selectedPatientId,
             staff_id: profile.id,
-            data: data,
+            data: payload,
             status: 'submitted'
           }]),
           30000
@@ -147,7 +169,7 @@ export const DischargeSummary: React.FC = () => {
       setIsGeneratingPDF(true);
       const formData = getValues();
       console.log('Discharge Summary: Form data for PDF:', formData);
-      await generateFormPDF('Discharge Summary', formData);
+      await generateFormPDF(FORM_NAME, formData);
       console.log('Discharge Summary: PDF generation successful.');
     } catch (error) {
       console.error('Discharge Summary: PDF error:', error);

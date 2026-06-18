@@ -172,6 +172,16 @@ const forms = [
   },
 ];
 
+const resolveSubmissionFormName = (submission: any) => {
+  const linkedForm = Array.isArray(submission.forms) ? submission.forms[0] : submission.forms;
+  if (linkedForm?.name) return linkedForm.name;
+  if (submission.data?.form_name) return submission.data.form_name;
+  if (submission.data?.dischargeReason || submission.data?.summary) return 'Discharge Summary';
+  if (submission.data?.assessment) return 'Admission Assessment';
+  if (submission.data?.bathroom && submission.data?.safetyEquipment) return 'Home Safety Inspection';
+  return 'Unknown Form';
+};
+
 export const ClinicalForms: React.FC = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -195,6 +205,7 @@ export const ClinicalForms: React.FC = () => {
           created_at,
           status,
           form_id,
+          data,
           forms (name),
           patients (first_name, last_name)
         `)
@@ -228,7 +239,7 @@ export const ClinicalForms: React.FC = () => {
     }
   };
 
-  const getFormPath = (formName: string) => {
+  const getFormPath = (formName?: string) => {
     const form = forms.find(f => f.title === formName);
     return form?.path || '/clinical-forms';
   };
@@ -288,14 +299,16 @@ export const ClinicalForms: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {recentSubmissions.map((submission) => (
+                  {recentSubmissions.map((submission) => {
+                    const formName = resolveSubmissionFormName(submission);
+                    return (
                     <tr key={submission.id} className="hover:bg-zinc-50/50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-zinc-100 rounded-lg text-zinc-500">
                             <FileText size={16} />
                           </div>
-                          <span className="text-sm font-bold text-zinc-900">{submission.forms?.name}</span>
+                          <span className="text-sm font-bold text-zinc-900">{formName}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -330,7 +343,7 @@ export const ClinicalForms: React.FC = () => {
                           <div className="absolute right-6 mt-2 w-32 bg-white rounded-xl border border-zinc-200 shadow-xl z-50 overflow-hidden">
                             <button
                               onClick={() => {
-                                navigate(`${getFormPath(submission.forms?.name)}?id=${submission.id}`);
+                                navigate(`${getFormPath(formName)}?id=${submission.id}`);
                                 setActiveMenu(null);
                               }}
                               className="w-full text-left px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-50 transition-colors font-medium flex items-center gap-2 border-b border-zinc-50"
@@ -352,7 +365,8 @@ export const ClinicalForms: React.FC = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -86,7 +86,8 @@ app.post("/api/setup-database", async (req, res) => {
         { name: 'Treatment Administration Record (TAR)', description: 'Monthly TAR tracking', schema: {} },
         { name: 'Clinical Note', description: 'General clinical documentation', schema: {} },
         { name: 'Admission Assessment', description: 'Initial patient admission evaluation', schema: {} },
-        { name: 'Discharge Summary', description: 'Final documentation upon patient discharge', schema: {} }
+        { name: 'Discharge Summary', description: 'Final documentation upon patient discharge', schema: {} },
+        { name: 'Home Safety Inspection', description: 'Home safety evaluation for patients', schema: {} }
       ];
       for (const form of formsToSeed) {
         const { data: existingForm } = await supabaseAdmin

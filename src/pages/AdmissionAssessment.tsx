@@ -8,11 +8,13 @@ import { FilePlus, Send, ArrowLeft, Loader2, FileText, User } from 'lucide-react
 import { SignaturePad } from '../components/SignaturePad';
 import { Logo } from '../components/Logo';
 import { Notification, NotificationType } from '../components/Notification';
-import { supabase, getFormIdByName } from '../services/supabase';
+import { supabase, getFormIdByName, invalidateFormCache } from '../services/supabase';
 import { generateFormPDF } from '../services/pdfService';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { AdmissionAssessmentTemplate } from '../components/PDFTemplates/AdmissionAssessmentTemplate';
 import { useAuth } from '../context/AuthContext';
+
+const FORM_NAME = 'Admission Assessment';
 
 const admissionSchema = z.object({
   date: z.string().min(1, 'Required'),
@@ -94,7 +96,8 @@ export const AdmissionAssessment: React.FC = () => {
         .single();
       
       if (data && !error) {
-        reset(data.data);
+        if ((data as any).patient_id) setSelectedPatientId((data as any).patient_id);
+        reset((data as any).data);
       }
     } catch (error) {
       console.error('Error fetching submission:', error);
@@ -109,13 +112,28 @@ export const AdmissionAssessment: React.FC = () => {
     }
     setIsSubmitting(true);
     try {
-      const formId = await getFormIdByName('Admission Assessment');
+      let formId = await getFormIdByName(FORM_NAME);
+      if (!formId) {
+        await fetch('/api/setup-database', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        invalidateFormCache();
+        formId = await getFormIdByName(FORM_NAME);
+      }
+      if (!formId) throw new Error(`The "${FORM_NAME}" form is missing from the database. Please contact your administrator.`);
+
+      const payload = {
+        ...data,
+        form_name: FORM_NAME,
+        submitted_at: new Date().toISOString(),
+      };
 
       if (editId) {
         const { error } = await supabase
           .from('form_responses')
           .update({
-            data: data,
+            form_id: formId,
+            patient_id: selectedPatientId,
+            data: payload,
+            status: 'submitted',
             updated_at: new Date().toISOString()
           })
           .eq('id', editId);
@@ -126,7 +144,7 @@ export const AdmissionAssessment: React.FC = () => {
           form_id: formId,
           patient_id: selectedPatientId,
           staff_id: profile.id,
-          data: data,
+          data: payload,
           status: 'submitted'
         }]);
         if (error) throw error;
@@ -146,7 +164,7 @@ export const AdmissionAssessment: React.FC = () => {
       setIsGeneratingPDF(true);
       const formData = getValues();
       console.log('Admission Assessment: Form data for PDF:', formData);
-      await generateFormPDF('Admission Assessment', formData);
+      await generateFormPDF(FORM_NAME, formData);
       console.log('Admission Assessment: PDF generation successful.');
     } catch (error) {
       console.error('Admission Assessment: PDF error:', error);

@@ -41,6 +41,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 const RENDER_SCALE = 1.8;
 
+const decodePdfName = (value: any): string => {
+  if (!value) return '';
+  try {
+    if (typeof value.decodeText === 'function') return value.decodeText();
+    const raw = typeof value.toString === 'function' ? value.toString() : String(value);
+    return raw.startsWith('/') ? raw.slice(1) : raw;
+  } catch {
+    return '';
+  }
+};
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type FieldType = 'text' | 'multiline' | 'checkbox' | 'radio' | 'dropdown' | 'signature';
 
@@ -449,7 +460,8 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
                     ? name
                     : (multiWidget ? `${name}__${Math.round(rect.x)}__${Math.round(rect.y)}` : name);
 
-                  const buttonValue = info?.buttonValue ?? '';
+                  const widgetOnValue = decodePdfName((widget as any).getOnValue?.());
+                  const buttonValue = info?.buttonValue || widgetOnValue || options?.[wi] || '';
 
                   extracted.push({
                     name, valueKey, type: effectiveType, pageIndex,
@@ -462,7 +474,10 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
                     let existingVal = '';
                     try {
                       if (effectiveType === 'checkbox') {
-                        existingVal = (field as PDFCheckBox).isChecked?.() ? 'true' : 'false';
+                        const selectedValue = decodePdfName((field as any).acroField?.getValue?.());
+                        existingVal = buttonValue
+                          ? (selectedValue === buttonValue ? 'true' : 'false')
+                          : ((field as PDFCheckBox).isChecked?.() ? 'true' : 'false');
                       } else if (effectiveType === 'radio') {
                         existingVal = (field as PDFRadioGroup).getSelected?.() ?? '';
                       } else if (effectiveType === 'dropdown') {
@@ -565,16 +580,27 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
             if (!isEditMode || anyTracked) (field as any).setText(combined);
           }
         } else if (field instanceof PDFCheckBox) {
-          const v = vals[entries[0].valueKey];
-          if (!isEditMode || v !== undefined) {
-            (field as any)[(v ?? 'false') === 'true' ? 'check' : 'uncheck']();
+          const anyTracked = entries.some(e => vals[e.valueKey] !== undefined);
+          if (!isEditMode || anyTracked) {
+            const checkedEntry = entries.find(e => vals[e.valueKey] === 'true');
+            if (checkedEntry?.buttonValue) {
+              (field as any).markAsDirty?.();
+              (field as any).acroField?.setValue?.(PDFName.of(checkedEntry.buttonValue));
+            } else if (checkedEntry) {
+              (field as any).check();
+            } else {
+              (field as any).uncheck();
+            }
           }
         } else if (field instanceof PDFDropdown) {
           const v = vals[entries[0].valueKey];
           if ((!isEditMode || v !== undefined) && v) (field as any).select(v);
         } else if (field instanceof PDFRadioGroup) {
           const v = vals[entries[0].valueKey];
-          if ((!isEditMode || v !== undefined) && v) (field as any).select(v);
+          if (!isEditMode || v !== undefined) {
+            if (v) (field as any).select(v);
+            else (field as any).clear?.();
+          }
         }
       } catch (e) {
         console.warn(`[PDFFormViewer] skipping field "${field.getName?.()}":`, e);
