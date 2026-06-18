@@ -46,6 +46,7 @@ export const MedicationAdministrationRecord: React.FC = () => {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
   const patientId = searchParams.get('patientId') || DUMMY_PATIENT_ID;
+  const editId = searchParams.get('id');
   const [notification, setNotification] = useState<{ type: NotificationType, message: string } | null>(null);
 
   const { register, handleSubmit, setValue, watch, control, reset, getValues, formState: { errors, isSubmitting } } = useForm<MARFormValues>({
@@ -60,6 +61,9 @@ export const MedicationAdministrationRecord: React.FC = () => {
 
   const [formId, setFormId] = useState<string | null>(null);
   const [isFetchingForm, setIsFetchingForm] = useState(true);
+  const [patients, setPatients] = useState<Array<{id: string, first_name: string, last_name: string}>>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientId !== DUMMY_PATIENT_ID ? patientId : null);
+  const [isFetchingPatients, setIsFetchingPatients] = useState(true);
 
   useEffect(() => {
     const fetchFormId = async () => {
@@ -70,7 +74,20 @@ export const MedicationAdministrationRecord: React.FC = () => {
         setIsFetchingForm(false);
       }
     };
+    const fetchPatients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name')
+          .eq('is_active', true)
+          .order('last_name', { ascending: true });
+        if (data && !error) setPatients(data);
+      } finally {
+        setIsFetchingPatients(false);
+      }
+    };
     fetchFormId();
+    fetchPatients();
   }, []);
 
   const { fields: medFields, append: appendMed, remove: removeMed } = useFieldArray({
@@ -79,22 +96,44 @@ export const MedicationAdministrationRecord: React.FC = () => {
   });
 
   useEffect(() => {
-    if (patientId && patientId !== DUMMY_PATIENT_ID) {
+    if (!editId) return;
+    const fetchSubmission = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('form_responses')
+          .select('*')
+          .eq('id', editId)
+          .maybeSingle();
+        if (data && !error) {
+          reset(data.data);
+          if (data.patient_id) setSelectedPatientId(data.patient_id);
+        }
+      } catch (err) {
+        console.error('MAR: Error fetching submission:', err);
+      }
+    };
+    fetchSubmission();
+  }, [editId, reset]);
+
+  useEffect(() => {
+    if (selectedPatientId) {
       const fetchPatient = async () => {
         const { data, error } = await supabase
           .from('patients')
           .select('first_name, last_name, dob')
-          .eq('id', patientId)
+          .eq('id', selectedPatientId)
           .single();
-        
+
         if (data && !error) {
           setValue('patient.name', `${data.first_name} ${data.last_name}`);
           setValue('patient.dob', data.dob);
         }
       };
       fetchPatient();
+    } else {
+      setValue('patient.name', '');
     }
-  }, [patientId, setValue]);
+  }, [selectedPatientId, setValue]);
 
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -137,21 +176,26 @@ export const MedicationAdministrationRecord: React.FC = () => {
         setFormId(currentFormId);
       }
       
-      console.log(`${FORM_NAME}: Using Form ID: ${currentFormId}, Patient ID: ${patientId}`);
+      const activePatientId = selectedPatientId || DUMMY_PATIENT_ID;
+      console.log(`${FORM_NAME}: Using Form ID: ${currentFormId}, Patient ID: ${activePatientId}`);
+
+      if (!selectedPatientId) {
+        throw new Error('Please select a patient before submitting.');
+      }
 
       // 1.5 Verify patient exists
       const { data: patientExists, error: patientCheckError } = (await withTimeout(supabase
         .from('patients')
         .select('id')
-        .eq('id', patientId)
+        .eq('id', activePatientId)
         .maybeSingle())) as any;
-      
+
       if (patientCheckError) {
         console.error(`${FORM_NAME}: Patient check error:`, patientCheckError);
       }
-      
+
       if (!patientExists) {
-        throw new Error(`The patient (ID: ${patientId}) does not exist in the database. Please go to the Dashboard and click "Setup Now" to create the test patient.`);
+        throw new Error(`The selected patient does not exist in the database.`);
       }
 
       // 2. Insert or Update form_responses
@@ -171,7 +215,7 @@ export const MedicationAdministrationRecord: React.FC = () => {
           .from('form_responses')
           .insert([{
             form_id: currentFormId,
-            patient_id: patientId,
+            patient_id: activePatientId,
             staff_id: profile.id,
             data: data,
             status: status
@@ -267,14 +311,29 @@ export const MedicationAdministrationRecord: React.FC = () => {
             </ul>
           </div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-partners-blue-dark font-bold border-b pb-2">
               <User size={20} />
               <h3>Patient Info</h3>
             </div>
             <div className="space-y-2">
-              <input {...register('patient.name')} placeholder="Patient Name *" className="w-full px-4 py-2 rounded-xl border border-zinc-200 focus:ring-2 focus:ring-partners-blue-dark outline-none" />
+              <select
+                value={selectedPatientId || ''}
+                onChange={(e) => setSelectedPatientId(e.target.value || null)}
+                className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-white outline-none focus:ring-2 focus:ring-partners-blue-dark/20 transition-all"
+              >
+                <option value="">-- Select a Patient --</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.last_name}, {p.first_name}
+                  </option>
+                ))}
+              </select>
+              {patients.length === 0 && !isFetchingPatients && (
+                <p className="text-[10px] text-red-500 italic">No patients found. Please add patients first.</p>
+              )}
+              <input {...register('patient.name')} readOnly placeholder="Patient Name" className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-zinc-50 outline-none" />
               <input {...register('patient.allergies')} placeholder="Allergies (NKA if none)" className="w-full px-4 py-2 rounded-xl border border-zinc-200 text-red-600 font-bold focus:ring-2 focus:ring-partners-blue-dark outline-none" />
             </div>
           </div>
@@ -304,50 +363,50 @@ export const MedicationAdministrationRecord: React.FC = () => {
           </div>
           
           <div className="border border-zinc-200 rounded-2xl overflow-hidden">
-            <div className="w-full overflow-x-auto md:overflow-x-visible">
-              <table className="w-full text-[9px] border-collapse table-fixed">
+            <div className="w-full overflow-x-auto">
+              <table className="text-xs border-collapse" style={{ minWidth: 'max-content', width: '100%' }}>
                 <thead>
                   <tr className="bg-zinc-50 border-b border-zinc-200">
-                    <th className="p-0.5 border-r border-zinc-200 w-6 text-center">#</th>
-                    <th className="p-1 border-r border-zinc-200 w-28 text-left">Medication / Dose / Route / Freq</th>
-                    <th className="p-1 border-r border-zinc-200 w-10 text-center">Time</th>
+                    <th className="p-1 border-r border-zinc-200 w-8 text-center">#</th>
+                    <th className="p-2 border-r border-zinc-200 min-w-[220px] text-left">Medication / Dose / Route / Freq</th>
+                    <th className="p-2 border-r border-zinc-200 min-w-[80px] text-center">Time</th>
                     {Array.from({ length: daysInMonth }).map((_, i) => (
-                      <th key={i} className="p-0 border-r border-zinc-200 text-center w-5">{i + 1}</th>
+                      <th key={i} className="p-0 border-r border-zinc-200 text-center w-7">{i + 1}</th>
                     ))}
-                    <th className="p-1 w-6"></th>
+                    <th className="p-1 w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
                   {medFields.map((field, index) => (
                     <tr key={field.id} className="hover:bg-zinc-50/50 transition-colors">
-                      <td className="p-0.5 border-r border-zinc-200 text-center font-bold text-zinc-400">
+                      <td className="p-1 border-r border-zinc-200 text-center font-bold text-zinc-400">
                         {index + 1}
                       </td>
-                      <td className="p-1 border-r border-zinc-200">
-                        <div className="space-y-0.5">
-                          <input {...register(`medications.${index}.name`)} placeholder="Medication" className="w-full bg-transparent font-bold outline-none truncate" />
-                          <div className="flex gap-1 text-[7px] text-zinc-500">
-                            <input {...register(`medications.${index}.dose`)} placeholder="Dose" className="w-1/3 bg-transparent outline-none" />
-                            <input {...register(`medications.${index}.route`)} placeholder="Route" className="w-1/3 bg-transparent outline-none" />
-                            <input {...register(`medications.${index}.frequency`)} placeholder="Freq" className="w-1/3 bg-transparent outline-none" />
+                      <td className="p-2 border-r border-zinc-200">
+                        <div className="space-y-1">
+                          <input {...register(`medications.${index}.name`)} placeholder="Medication" className="w-full bg-transparent font-bold outline-none text-xs" />
+                          <div className="flex gap-2 text-[10px] text-zinc-500">
+                            <input {...register(`medications.${index}.dose`)} placeholder="Dose" className="w-1/3 bg-transparent outline-none border-b border-zinc-100 focus:border-partners-blue py-0.5" />
+                            <input {...register(`medications.${index}.route`)} placeholder="Route" className="w-1/3 bg-transparent outline-none border-b border-zinc-100 focus:border-partners-blue py-0.5" />
+                            <input {...register(`medications.${index}.frequency`)} placeholder="Freq" className="w-1/3 bg-transparent outline-none border-b border-zinc-100 focus:border-partners-blue py-0.5" />
                           </div>
                         </div>
                       </td>
-                      <td className="p-1 border-r border-zinc-200">
-                        <input {...register(`medications.${index}.times`)} placeholder="08:00" className="w-full bg-transparent text-center outline-none font-medium" />
+                      <td className="p-2 border-r border-zinc-200">
+                        <input {...register(`medications.${index}.times`)} placeholder="08:00" className="w-full bg-transparent text-center outline-none font-medium border-b border-zinc-100 focus:border-partners-blue py-0.5" />
                       </td>
                       {Array.from({ length: daysInMonth }).map((_, i) => (
-                        <td key={i} className="p-0 border-r border-zinc-200 h-7">
-                          <input 
-                            {...register(`medications.${index}.administrations.${i + 1}`)} 
-                            className="w-full h-full text-center bg-transparent outline-none focus:bg-partners-blue/5 uppercase"
+                        <td key={i} className="p-0 border-r border-zinc-200 h-8">
+                          <input
+                            {...register(`medications.${index}.administrations.${i + 1}`)}
+                            className="w-full h-full text-center bg-transparent outline-none focus:bg-partners-blue/5 uppercase text-xs"
                             maxLength={2}
                           />
                         </td>
                       ))}
-                      <td className="p-0.5 text-center">
+                      <td className="p-1 text-center">
                         <button type="button" onClick={() => removeMed(index)} className="text-red-400 hover:text-red-600">
-                          <Trash2 size={10} />
+                          <Trash2 size={12} />
                         </button>
                       </td>
                     </tr>

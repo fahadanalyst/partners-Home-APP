@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 import { Button } from '../components/Button';
-import { FilePlus, Send, ArrowLeft, Loader2, FileText } from 'lucide-react';
+import { FilePlus, Send, ArrowLeft, Loader2, FileText, User } from 'lucide-react';
 import { SignaturePad } from '../components/SignaturePad';
 import { Logo } from '../components/Logo';
 import { Notification, NotificationType } from '../components/Notification';
@@ -28,10 +28,14 @@ export const AdmissionAssessment: React.FC = () => {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('id');
+  const patientIdFromUrl = searchParams.get('patientId');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [notification, setNotification] = useState<{ type: NotificationType, message: string } | null>(null);
+  const [patients, setPatients] = useState<Array<{id: string, first_name: string, last_name: string}>>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientIdFromUrl || null);
+  const [isFetchingPatients, setIsFetchingPatients] = useState(true);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset, getValues } = useForm<AdmissionValues>({
     resolver: zodResolver(admissionSchema),
@@ -39,6 +43,41 @@ export const AdmissionAssessment: React.FC = () => {
       date: new Date().toISOString().split('T')[0]
     }
   });
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name')
+          .eq('is_active', true)
+          .order('last_name', { ascending: true });
+        if (data && !error) setPatients(data);
+      } finally {
+        setIsFetchingPatients(false);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  useEffect(() => {
+    if (selectedPatientId) {
+      const fetchPatient = async () => {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('first_name, last_name, dob')
+          .eq('id', selectedPatientId)
+          .single();
+        if (data && !error) {
+          setValue('patientName', `${data.first_name} ${data.last_name}`);
+          setValue('dob', data.dob || '');
+        }
+      };
+      fetchPatient();
+    } else {
+      setValue('patientName', '');
+    }
+  }, [selectedPatientId, setValue]);
 
   useEffect(() => {
     if (editId) {
@@ -64,10 +103,14 @@ export const AdmissionAssessment: React.FC = () => {
 
   const onSubmit = async (data: AdmissionValues) => {
     if (!profile) return;
+    if (!selectedPatientId) {
+      setNotification({ type: 'error', message: 'Please select a patient before submitting.' });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const formId = await getFormIdByName('Admission Assessment');
-      
+
       if (editId) {
         const { error } = await supabase
           .from('form_responses')
@@ -81,7 +124,7 @@ export const AdmissionAssessment: React.FC = () => {
       } else {
         const { error } = await supabase.from('form_responses').insert([{
           form_id: formId,
-          patient_id: '00000000-0000-0000-0000-000000000000',
+          patient_id: selectedPatientId,
           staff_id: profile.id,
           data: data,
           status: 'submitted'
@@ -180,8 +223,27 @@ export const AdmissionAssessment: React.FC = () => {
             <input type="date" {...register('date')} className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-2 focus:ring-partners-blue-dark" />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700">Patient Name <span className="text-red-500">*</span></label>
-            <input {...register('patientName')} placeholder="Enter full name" className="w-full px-4 py-2 rounded-xl border border-zinc-200 outline-none focus:ring-2 focus:ring-partners-blue-dark" />
+            <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
+              <User size={16} className="text-zinc-400" />
+              Select Patient <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedPatientId || ''}
+              onChange={(e) => setSelectedPatientId(e.target.value || null)}
+              className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-white outline-none focus:ring-2 focus:ring-partners-blue-dark/20 transition-all"
+            >
+              <option value="">-- Select a Patient --</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.last_name}, {p.first_name}
+                </option>
+              ))}
+            </select>
+            {patients.length === 0 && !isFetchingPatients && (
+              <p className="text-[10px] text-red-500 mt-1 italic">No patients found. Please add patients first.</p>
+            )}
+            <label className="text-sm font-medium text-zinc-700 mt-2 block">Patient Name</label>
+            <input {...register('patientName')} readOnly className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-zinc-50 outline-none" />
           </div>
         </div>
         <div className="space-y-1">

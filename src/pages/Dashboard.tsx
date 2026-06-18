@@ -54,6 +54,9 @@ const FORM_ROUTES: Record<string, string> = {
   'GAFC Aide Care Plan': '/gafc-aide-care-plan',
   'Medication List': '/medication-list',
   'Home Safety Inspection': '/home-safety-inspection',
+  'CIRF': '/cirf',
+  'Admission Assessment': '/admission-assessment',
+  'Discharge Summary': '/discharge-summary',
 };
 
 const statusStyle = (status: string) => {
@@ -868,7 +871,7 @@ export const Dashboard: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {allForms.map((fr, idx) => {
-                  const formName = fr.forms?.name ?? 'Unknown Form';
+                  const formName = fr.forms?.name ?? fr.data?.form_name ?? 'Unknown Form';
                   const patientName = fr.patients
                     ? `${fr.patients.last_name}, ${fr.patients.first_name}`
                     : '—';

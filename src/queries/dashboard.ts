@@ -212,7 +212,7 @@ export const useSubmittedForms = (page: number, pageSize: number) =>
       const { data, error, count } = await supabase
         .from('form_responses')
         .select(`
-          id, created_at, status, form_id, patient_id, storage_path,
+          id, created_at, status, form_id, patient_id, storage_path, data,
           forms(name),
           patients(first_name, last_name)
         `, { count: 'estimated' })

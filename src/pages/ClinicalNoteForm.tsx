@@ -57,6 +57,9 @@ export const ClinicalNoteForm: React.FC = () => {
 
   const [formId, setFormId] = useState<string | null>(null);
   const [isFetchingForm, setIsFetchingForm] = useState(true);
+  const [patients, setPatients] = useState<Array<{id: string, first_name: string, last_name: string}>>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientId !== DUMMY_PATIENT_ID ? patientId : null);
+  const [isFetchingPatients, setIsFetchingPatients] = useState(true);
 
   useEffect(() => {
     const fetchFormId = async () => {
@@ -67,7 +70,20 @@ export const ClinicalNoteForm: React.FC = () => {
         setIsFetchingForm(false);
       }
     };
+    const fetchPatients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name')
+          .eq('is_active', true)
+          .order('last_name', { ascending: true });
+        if (data && !error) setPatients(data);
+      } finally {
+        setIsFetchingPatients(false);
+      }
+    };
     fetchFormId();
+    fetchPatients();
   }, []);
 
   useEffect(() => {
@@ -104,21 +120,23 @@ export const ClinicalNoteForm: React.FC = () => {
   };
 
   useEffect(() => {
-    if (patientId && patientId !== DUMMY_PATIENT_ID) {
+    if (selectedPatientId) {
       const fetchPatient = async () => {
         const { data, error } = await supabase
           .from('patients')
           .select('first_name, last_name')
-          .eq('id', patientId)
+          .eq('id', selectedPatientId)
           .single();
-        
+
         if (data && !error) {
           setValue('patient.name', `${data.first_name} ${data.last_name}`);
         }
       };
       fetchPatient();
+    } else {
+      setValue('patient.name', '');
     }
-  }, [patientId, setValue]);
+  }, [selectedPatientId, setValue]);
 
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -143,21 +161,26 @@ export const ClinicalNoteForm: React.FC = () => {
         setFormId(currentFormId);
       }
       
-      console.log(`Clinical Note: Using Form ID: ${currentFormId}, Patient ID: ${patientId}`);
+      const activePatientId = selectedPatientId || DUMMY_PATIENT_ID;
+      console.log(`Clinical Note: Using Form ID: ${currentFormId}, Patient ID: ${activePatientId}`);
+
+      if (!selectedPatientId) {
+        throw new Error('Please select a patient before submitting.');
+      }
 
       // 1.5 Verify patient exists
       const { data: patientExists, error: patientCheckError } = (await withTimeout(supabase
         .from('patients')
         .select('id')
-        .eq('id', patientId)
+        .eq('id', activePatientId)
         .maybeSingle())) as any;
-      
+
       if (patientCheckError) {
         console.error('Clinical Note: Patient check error:', patientCheckError);
       }
-      
+
       if (!patientExists) {
-        throw new Error(`The patient (ID: ${patientId}) does not exist in the database. Please go to the Dashboard and click "Setup Now" to create the test patient.`);
+        throw new Error(`The selected patient does not exist in the database.`);
       }
 
       // 2. Insert or Update form_responses
@@ -182,7 +205,7 @@ export const ClinicalNoteForm: React.FC = () => {
           .from('form_responses')
           .insert([{
             form_id: currentFormId,
-            patient_id: patientId,
+            patient_id: activePatientId,
             staff_id: profile.id,
             visit_id: visitIdFromUrl || null,
             data: data,
@@ -319,9 +342,24 @@ export const ClinicalNoteForm: React.FC = () => {
             <div className="space-y-1">
               <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
                 <User size={16} className="text-zinc-400" />
-                Patient Name
+                Select Patient <span className="text-red-500">*</span>
               </label>
-              <input {...register('patient.name')} className="w-full px-4 py-2 rounded-xl border border-zinc-200" />
+              <select
+                value={selectedPatientId || ''}
+                onChange={(e) => setSelectedPatientId(e.target.value || null)}
+                className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-white outline-none focus:ring-2 focus:ring-partners-blue-dark/20 transition-all"
+              >
+                <option value="">-- Select a Patient --</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.last_name}, {p.first_name}
+                  </option>
+                ))}
+              </select>
+              {patients.length === 0 && !isFetchingPatients && (
+                <p className="text-[10px] text-red-500 mt-1 italic">No patients found. Please add patients first.</p>
+              )}
+              <input {...register('patient.name')} readOnly className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-zinc-50 outline-none mt-1" />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">

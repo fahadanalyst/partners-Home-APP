@@ -119,6 +119,8 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
   // Raw bytes of the currently-loaded stored PDF, used as the base document
   // when saving edits (so existing values + edits are preserved).
   const storedPdfBytesRef = useRef<Uint8Array | null>(null);
+  // Cached bytes of the blank template so buildFilledBytes never re-fetches it.
+  const templateBytesRef = useRef<Uint8Array | null>(null);
 
   formValuesRef.current = formValues;
   fieldsRef.current     = fields;
@@ -161,6 +163,7 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
     storedStoragePathRef.current = null;
     storedResponseIdRef.current  = null;
     storedPdfBytesRef.current    = null;
+    templateBytesRef.current     = null; // clear so the new pdfPath is fetched fresh
 
     if (!responseIdFromUrl) {
       // No submission ID → show blank editable template
@@ -295,15 +298,26 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
 
     (async () => {
       try {
-        const res = await fetch(activePdfPath);
-        if (!res.ok) throw new Error(`HTTP ${res.status} fetching PDF`);
-        const ct = res.headers.get('content-type') ?? '';
-        if (ct.includes('text/html'))
-          throw new Error(`"${pdfPath}" returned HTML — check the file exists in /public/`);
-        const buffer = await res.arrayBuffer();
-        const bytes  = new Uint8Array(buffer);
-        if (bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46)
-          throw new Error(`The loaded file is not a valid PDF.`);
+        // If the bytes were already downloaded by the resolution effect (stored
+        // PDF), use them directly — no redundant fetch needed.
+        // For blank templates, use the cached copy if available; otherwise fetch
+        // once and cache for future builds.
+        let bytes: Uint8Array;
+        if (storedPdfBytesRef.current) {
+          bytes = storedPdfBytesRef.current;
+        } else if (templateBytesRef.current) {
+          bytes = templateBytesRef.current;
+        } else {
+          const res = await fetch(activePdfPath);
+          if (!res.ok) throw new Error(`HTTP ${res.status} fetching PDF`);
+          const ct = res.headers.get('content-type') ?? '';
+          if (ct.includes('text/html'))
+            throw new Error(`"${pdfPath}" returned HTML — check the file exists in /public/`);
+          bytes = new Uint8Array(await res.arrayBuffer());
+          if (bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46)
+            throw new Error(`The loaded file is not a valid PDF.`);
+          templateBytesRef.current = bytes;
+        }
         if (!active) return;
 
         const pdfjsDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
@@ -501,10 +515,14 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
     let src: Uint8Array;
     if (sourceBytes) {
       src = sourceBytes;
+    } else if (templateBytesRef.current) {
+      // Use cached template bytes — avoids a network round-trip on every submit
+      src = templateBytesRef.current;
     } else {
       const res = await fetch(pdfPath);
       if (!res.ok) throw new Error(`Cannot fetch PDF: HTTP ${res.status}`);
       src = new Uint8Array(await res.arrayBuffer());
+      templateBytesRef.current = src;
     }
     if (src[0] !== 0x25 || src[1] !== 0x50 || src[2] !== 0x44 || src[3] !== 0x46)
       throw new Error('Fetched file is not a valid PDF.');
@@ -673,10 +691,31 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
     setIsSubmitting(true);
     setSubmitResult(null);
     try {
-      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      // Run auth check, PDF build, and form-ID lookup all in parallel
+      const [
+        { data: authData, error: authErr },
+        filled,
+        { data: formRec },
+      ] = await Promise.all([
+        supabase.auth.getUser(),
+        buildFilledBytes(),
+        supabase.from('forms').select('id').eq('name', formName ?? title).maybeSingle(),
+      ]);
+
+      const user = authData?.user;
       if (authErr || !user) throw new Error('Not authenticated — please log in again.');
 
-      const filled      = await buildFilledBytes();
+      // If the form row doesn't exist yet (e.g. CIRF not seeded), auto-create it
+      let formId = formRec?.id ?? null;
+      if (!formId) {
+        const { data: newForm } = await supabase
+          .from('forms')
+          .insert({ name: formName ?? title })
+          .select('id')
+          .maybeSingle();
+        formId = newForm?.id ?? null;
+      }
+
       const slug        = (formName ?? title).toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const storagePath = `${slug}/${selectedPatientId}/${Date.now()}.pdf`;
 
@@ -685,11 +724,8 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
         .upload(storagePath, filled, { contentType: 'application/pdf', upsert: false });
       if (upErr) throw upErr;
 
-      const { data: formRec } = await supabase
-        .from('forms').select('id').eq('name', formName ?? title).maybeSingle();
-
       const { error: dbErr } = await supabase.from('form_responses').insert({
-        form_id:      formRec?.id ?? null,
+        form_id:      formId,
         patient_id:   selectedPatientId,
         staff_id:     user.id,
         status:       'submitted',
@@ -733,7 +769,9 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
     }
   };
 
-  // ── Save edits to the stored submission (same storage object) ──────────────
+  // ── Save edits to the stored submission ────────────────────────────────────
+  // Saves to a NEW timestamped path each time so the Supabase CDN cache never
+  // serves a stale version when the user reopens the form.
   const handleSaveEdit = async () => {
     if (!storedStoragePathRef.current || !storedResponseIdRef.current) {
       setSaveResult({ type: 'error', message: 'Missing storage reference — cannot save.' });
@@ -742,29 +780,43 @@ export const PDFFormViewer: React.FC<PDFFormViewerProps> = ({
     setSavingEdit(true);
     setSaveResult(null);
     try {
-      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      // Auth check and PDF build in parallel
+      const baseBytes = storedPdfBytesRef.current ?? undefined;
+      const [{ data: authData, error: authErr }, filled] = await Promise.all([
+        supabase.auth.getUser(),
+        buildFilledBytes(baseBytes),
+      ]);
+      const user = authData?.user;
       if (authErr || !user) throw new Error('Not authenticated — please log in again.');
 
-      // Build the updated PDF from the currently-loaded stored PDF bytes,
-      // applying the edited field values on top of it.
-      const baseBytes = storedPdfBytesRef.current ?? undefined;
-      const filled    = await buildFilledBytes(baseBytes);
+      // Build a new versioned path (same folder, new filename) so CDN cache
+      // of the old path is irrelevant — the DB row will point at the new file.
+      const oldPath  = storedStoragePathRef.current;
+      const folder   = oldPath.substring(0, oldPath.lastIndexOf('/'));
+      const newPath  = `${folder}/${Date.now()}.pdf`;
 
-      // Overwrite the same storage object
       const { error: upErr } = await supabase.storage
         .from('pdf-submissions')
-        .upload(storedStoragePathRef.current, filled, { contentType: 'application/pdf', upsert: true });
+        .upload(newPath, filled, { contentType: 'application/pdf', upsert: false });
       if (upErr) throw upErr;
 
-      // Touch the form_responses row
+      // Update the DB row to point at the new file
       const { error: dbErr } = await supabase
         .from('form_responses')
-        .update({ updated_at: new Date().toISOString() })
+        .update({
+          storage_path: newPath,
+          updated_at:   new Date().toISOString(),
+        })
         .eq('id', storedResponseIdRef.current);
       if (dbErr) throw dbErr;
 
-      // Refresh the on-screen PDF + bytes ref from the newly-saved file
-      storedPdfBytesRef.current = filled;
+      // Best-effort cleanup of the old file (non-blocking)
+      supabase.storage.from('pdf-submissions').remove([oldPath])
+        .catch(e => console.warn('[PDFFormViewer] old PDF cleanup failed (non-fatal):', e));
+
+      // Update in-memory refs so the current session is consistent
+      storedStoragePathRef.current = newPath;
+      storedPdfBytesRef.current    = filled;
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
       const newBlobUrl   = URL.createObjectURL(new Blob([filled as BlobPart], { type: 'application/pdf' }));
       blobUrlRef.current = newBlobUrl;

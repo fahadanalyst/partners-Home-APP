@@ -77,9 +77,13 @@ const RESOURCE_FIELDS = [
 export const PatientResourceData: React.FC = () => {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
-  const patientId = searchParams.get('patientId') || DUMMY_PATIENT_ID;
+  const patientIdFromUrl = searchParams.get('patientId');
+  const patientId = patientIdFromUrl || DUMMY_PATIENT_ID;
   const editId = searchParams.get('id');
   const [notification, setNotification] = useState<{ type: NotificationType, message: string } | null>(null);
+  const [patients, setPatients] = useState<Array<{id: string, first_name: string, last_name: string}>>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientIdFromUrl || null);
+  const [isFetchingPatients, setIsFetchingPatients] = useState(true);
 
   const { register, handleSubmit, setValue, getValues, watch, reset, formState: { errors, isSubmitting } } = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceSchema),
@@ -101,19 +105,32 @@ export const PatientResourceData: React.FC = () => {
         setIsFetchingForm(false);
       }
     };
+    const fetchPatients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name')
+          .eq('is_active', true)
+          .order('last_name', { ascending: true });
+        if (data && !error) setPatients(data);
+      } finally {
+        setIsFetchingPatients(false);
+      }
+    };
     fetchFormId();
+    fetchPatients();
   }, []);
 
   // Load patient info + saved form data (latest draft or specific ?id= submission)
   useEffect(() => {
-    if (!patientId || patientId === DUMMY_PATIENT_ID) return;
+    if (!selectedPatientId) return;
 
     const loadData = async () => {
       // 1. Always populate patient fields from patient record
       const { data: patient } = await supabase
         .from('patients')
         .select('first_name, last_name, dob, gender, phone, street, apt, city, state, zip, insurance_id')
-        .eq('id', patientId)
+        .eq('id', selectedPatientId)
         .single();
 
       if (patient) {
@@ -144,7 +161,7 @@ export const PatientResourceData: React.FC = () => {
         const { data: latest } = await supabase
           .from('form_responses')
           .select('*')
-          .eq('patient_id', patientId)
+          .eq('patient_id', selectedPatientId)
           .eq('form_id', formId)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -154,7 +171,7 @@ export const PatientResourceData: React.FC = () => {
     };
 
     loadData();
-  }, [patientId, formId, editId]);
+  }, [selectedPatientId, formId, editId]);
 
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -196,7 +213,12 @@ export const PatientResourceData: React.FC = () => {
         setFormId(currentFormId);
       }
       
-      console.log(`Patient Resource Data: Using Form ID: ${currentFormId}, Patient ID: ${patientId}`);
+      const activePatientId = selectedPatientId || DUMMY_PATIENT_ID;
+      console.log(`Patient Resource Data: Using Form ID: ${currentFormId}, Patient ID: ${activePatientId}`);
+
+      if (!selectedPatientId) {
+        throw new Error('Please select a patient before submitting.');
+      }
 
       // 2. Insert or Update form_responses
       let responseError: any = null;
@@ -212,7 +234,7 @@ export const PatientResourceData: React.FC = () => {
           .from('form_responses')
           .insert([{
             form_id: currentFormId,
-            patient_id: patientId,
+            patient_id: activePatientId,
             staff_id: profile.id,
             data: data,
             status: status
@@ -288,8 +310,27 @@ export const PatientResourceData: React.FC = () => {
         <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700">Patient Name</label>
-              <input {...register('patient.name')} className="w-full px-4 py-2 rounded-xl border border-zinc-200" />
+              <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
+                <UserRound size={16} className="text-zinc-400" />
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedPatientId || ''}
+                onChange={(e) => setSelectedPatientId(e.target.value || null)}
+                className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-white outline-none focus:ring-2 focus:ring-partners-blue-dark/20 transition-all"
+              >
+                <option value="">-- Select a Patient --</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.last_name}, {p.first_name}
+                  </option>
+                ))}
+              </select>
+              {patients.length === 0 && !isFetchingPatients && (
+                <p className="text-[10px] text-red-500 mt-1 italic">No patients found. Please add patients first.</p>
+              )}
+              <label className="text-sm font-medium text-zinc-700 mt-2 block">Patient Name</label>
+              <input {...register('patient.name')} readOnly className="w-full px-4 py-2 rounded-xl border border-zinc-200 bg-zinc-50" />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium text-zinc-700">Address</label>
